@@ -1,0 +1,11 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  background: #ecfdf5;
+  color: #064e3b;
+}
+code {
+  background: #d1fae5;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}

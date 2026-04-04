@@ -1,0 +1,22 @@
+services:
+  runner-api:
+    image: node:22-alpine
+    working_dir: /app
+    command: node server.mjs
+    volumes:
+      - ./runner-api:/app:ro
+      - .:/workspace:rw
+    environment:
+      DATA_FILE: /workspace/data.json
+
+  program-runner:
+    image: nginx:alpine
+    depends_on:
+      - runner-api
+    ports:
+      - "${PROGRAM_RUNNER_PORT:-8787}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/child-site-headers.conf:/etc/nginx/snippets/child-site-headers.conf:ro
+      - ./children:/usr/share/nginx/children:ro
+      - ./top-page:/usr/share/nginx/html:ro

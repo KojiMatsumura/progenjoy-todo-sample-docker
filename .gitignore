@@ -1,0 +1,5 @@
+.DS_Store
+*.log
+
+# runner-api が api_id:2 で書き出すローカル永続化（リポジトリルート）
+/data.json
