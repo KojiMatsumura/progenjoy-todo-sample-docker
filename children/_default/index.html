@@ -23,7 +23,12 @@
       <p><strong>postMessage テスト</strong>（親の ProgramIframeBridge 向け）</p>
       <button type="button" id="btn-ping">api_id:1（data.json 読込）を送る</button>
       <button type="button" id="btn-save">api_id:2（data.json 保存）を送る</button>
-      <button type="button" id="btn-sub">サブページへ（api_id:3 リダイレクト）</button>
+      <button type="button" id="btn-run-code">
+        api_id:3（親でワーカー実行・return 2+2）
+      </button>
+      <p>
+        <a href="./subpage.html">サブページへ</a>（通常のリンク遷移）
+      </p>
       <div id="log"></div>
     </div>
   </body>

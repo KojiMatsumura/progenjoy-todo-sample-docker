@@ -8,6 +8,8 @@ services:
       - .:/workspace:rw
     environment:
       DATA_FILE: /workspace/data.json
+      CHILDREN_DIR: /workspace/children
+      DEFAULT_PROGRAMS_PRODUCT_ID: local-demo
 
   program-runner:
     image: nginx:alpine

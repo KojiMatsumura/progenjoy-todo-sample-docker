@@ -33,19 +33,18 @@
     log("送信: api_id 2");
   };
 
-  document.getElementById("btn-sub").onclick = function () {
+  document.getElementById("btn-run-code").onclick = function () {
     if (!window.parent || window.parent === window) {
-      window.location.href = "./subpage.html";
+      log("親フレームなし（単体表示）");
       return;
     }
     window.parent.postMessage(
       {
         api_id: 3,
-        redirect_url: "/subpage.html",
-        content: { demo: true, from: "index" },
+        content: { code: "return 2 + 2;" },
       },
       "*"
     );
-    log("送信: api_id 3 redirect /subpage.html");
+    log("送信: api_id 3 runUserLogic (return 2+2)");
   };
 })();

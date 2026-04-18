@@ -264,6 +264,42 @@
         color: #92400e;
         text-decoration: none;
       }
+      .program-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--gray-200);
+        background: var(--gray-50);
+      }
+      .program-bar label {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--gray-700);
+      }
+      .program-bar select {
+        min-width: 12rem;
+        max-width: 100%;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.875rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--gray-300);
+        background: #fff;
+        color: var(--gray-900);
+      }
+      .program-bar select:focus {
+        outline: 2px solid var(--orange);
+        outline-offset: 1px;
+      }
+      .program-bar .hint {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--gray-500);
+        flex-basis: 100%;
+      }
     </style>
   </head>
   <body>
@@ -276,6 +312,18 @@
         <a href="#" onclick="return false">投稿者向けの詳細（別タブで開く）</a>
         <span class="badge-local">Docker モック</span>
       </p>
+
+      <div class="program-bar">
+        <label for="program-select">表示する子プログラム</label>
+        <select id="program-select" aria-describedby="program-hint" disabled>
+          <option value="">一覧を読み込み中…</option>
+        </select>
+        <p class="hint" id="program-hint">
+          一覧は <code>/api/child-programs</code> が <code>children</code> 直下のフォルダを走査して自動生成します（
+          <code>_default</code> → <code>/programs/&lt;productId&gt;/</code>、それ以外 →
+          <code>/program/&lt;フォルダ名&gt;/</code>）。
+        </p>
+      </div>
 
       <div class="grid">
         <div class="runner-card">
@@ -344,14 +392,102 @@
 
     <script>
       (function () {
-        var params = new URLSearchParams(window.location.search);
-        var name = params.get("name");
-        if (name) {
-          document.getElementById("page-title").textContent = "プログラムテスト: " + name;
-          document.getElementById("runner-frame").title = name;
+        /**
+         * API が使えないときのみ（例: 静的ファイルを直接開いた場合）。
+         * Docker では /api/child-programs が children を走査して返します。
+         */
+        var FALLBACK_CHILD_PROGRAMS = [
+          {
+            id: "default",
+            label: "ローカルデモ (_default)",
+            path: "/programs/local-demo/",
+            iframeTitle: "ローカルデモプログラム",
+          },
+          {
+            id: "sample-game",
+            label: "sample-game (/program/sample-game/)",
+            path: "/program/sample-game/",
+            iframeTitle: "sample-game",
+          },
+        ];
+
+        function fetchChildProgramList() {
+          return fetch("/api/child-programs", { credentials: "same-origin" })
+            .then(function (r) {
+              if (!r.ok) throw new Error("bad status");
+              return r.json();
+            })
+            .then(function (j) {
+              if (
+                j &&
+                j.programs &&
+                Array.isArray(j.programs) &&
+                j.programs.length
+              ) {
+                return j.programs;
+              }
+              return null;
+            })
+            .catch(function () {
+              return null;
+            });
         }
 
-        var viewport = document.getElementById("viewport");
+        function boot(childPrograms) {
+          function findProgramById(id) {
+            for (var i = 0; i < childPrograms.length; i++) {
+              if (childPrograms[i].id === id) return childPrograms[i];
+            }
+            return childPrograms[0];
+          }
+
+          var params = new URLSearchParams(window.location.search);
+          var name = params.get("name");
+          var programParam = params.get("program");
+          var selectedProgram = findProgramById(programParam);
+
+          var pageTitleEl = document.getElementById("page-title");
+          var runnerFrame = document.getElementById("runner-frame");
+          var programSelect = document.getElementById("program-select");
+
+          programSelect.innerHTML = "";
+          childPrograms.forEach(function (p) {
+            var opt = document.createElement("option");
+            opt.value = p.id;
+            opt.textContent = p.label;
+            programSelect.appendChild(opt);
+          });
+          programSelect.disabled = false;
+          programSelect.value = selectedProgram.id;
+          runnerFrame.src = selectedProgram.path;
+
+          function applyTitle() {
+            if (name) {
+              pageTitleEl.textContent = "プログラムテスト: " + name;
+              runnerFrame.title = name;
+            } else {
+              pageTitleEl.textContent =
+                "プログラムテスト: " + selectedProgram.label;
+              runnerFrame.title = selectedProgram.iframeTitle;
+            }
+          }
+          applyTitle();
+
+          function setProgramQueryInUrl(id) {
+            var u = new URL(window.location.href);
+            u.searchParams.set("program", id);
+            history.replaceState(null, "", u.pathname + u.search);
+          }
+
+          programSelect.addEventListener("change", function () {
+            selectedProgram = findProgramById(programSelect.value);
+            runnerFrame.src = selectedProgram.path;
+            applyTitle();
+            setProgramQueryInUrl(selectedProgram.id);
+            clearLog();
+          });
+
+          var viewport = document.getElementById("viewport");
         var fsBtn = document.getElementById("fs-btn");
         var iconEx = document.getElementById("fs-icon-expand");
         var iconCol = document.getElementById("fs-icon-collapse");
@@ -393,7 +529,18 @@
 
         var logEmpty = document.getElementById("log-empty");
         var logList = document.getElementById("log-list");
-        var iframe = document.getElementById("runner-frame");
+        var iframe = runnerFrame;
+
+        function clearLog() {
+          logList.innerHTML = "";
+          logEmpty.hidden = false;
+          logList.hidden = true;
+        }
+        /**
+         * allow-same-origin なしの sandbox 子は不透明オリジンとなり、ev.origin は "null"。
+         * postMessage の第2引数に "null" や実オリジンは使えないため、子への返信は '*' のみ有効。
+         */
+        var childReplyTarget = "*";
         var maxEntries = 200;
 
         function pad2(n) {
@@ -462,7 +609,87 @@
           );
         }
 
-        function postBackToChild(source, origin, res, body) {
+        /** child-program-override の monitor と同形: { api_id: 3, content: { code: string } } */
+        function isRunUserLogicRequest(data) {
+          if (typeof data !== "object" || data === null) return false;
+          if (data.api_id !== 3) return false;
+          var c = data.content;
+          if (typeof c !== "object" || c === null || Array.isArray(c)) return false;
+          return typeof c.code === "string";
+        }
+
+        function createSecureWorkerBlob(userCode) {
+          var head =
+            "(function() {\n" +
+            "  var forbidden = ['Worker', 'fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts'];\n" +
+            "  forbidden.forEach(function(prop) {\n" +
+            "    Object.defineProperty(self, prop, {\n" +
+            "      value: undefined,\n" +
+            "      writable: false,\n" +
+            "      configurable: false\n" +
+            "    });\n" +
+            "  });\n" +
+            "  self.onmessage = function(event) {\n" +
+            "    try {\n" +
+            "      var result = (function() {\n";
+          var tail =
+            "      })();\n" +
+            "      postMessage(result);\n" +
+            "    } catch (err) {\n" +
+            "      postMessage({\n" +
+            "        type: 'error',\n" +
+            "        data: err && err.message ? String(err.message) : String(err)\n" +
+            "      });\n" +
+            "    }\n" +
+            "  };\n" +
+            "})();\n";
+          return new Blob([head + userCode + tail], {
+            type: "application/javascript",
+          });
+        }
+
+        function runUserLogic(userCode) {
+          return new Promise(function (resolve, reject) {
+            var blob = createSecureWorkerBlob(userCode);
+            var workerURL = URL.createObjectURL(blob);
+            var worker = new Worker(workerURL);
+            var timeout = setTimeout(function () {
+              worker.terminate();
+              URL.revokeObjectURL(workerURL);
+              reject(new Error("Timeout"));
+            }, 3000);
+            worker.onmessage = function (e) {
+              clearTimeout(timeout);
+              worker.terminate();
+              URL.revokeObjectURL(workerURL);
+              var d = e.data;
+              if (
+                d &&
+                typeof d === "object" &&
+                d !== null &&
+                "type" in d &&
+                d.type === "error"
+              ) {
+                reject(
+                  new Error(
+                    typeof d.data === "string" ? d.data : "Worker error"
+                  )
+                );
+                return;
+              }
+              resolve(d);
+            };
+            worker.onerror = function (err) {
+              clearTimeout(timeout);
+              worker.terminate();
+              URL.revokeObjectURL(workerURL);
+              reject(err);
+            };
+            worker.postMessage(undefined);
+          });
+        }
+
+        function postBackToChild(source, res, body) {
           var payload;
           if (!res.ok) {
             payload = Object.assign(
@@ -472,13 +699,12 @@
           } else {
             payload = body;
           }
-          source.postMessage(payload, origin);
+          source.postMessage(payload, childReplyTarget);
         }
 
         window.addEventListener("message", function (ev) {
           if (ev.source !== iframe.contentWindow) return;
           appendLog("in", "postMessage received", ev.data);
-          var origin = ev.origin;
 
           if (isApi042(ev.data)) {
             if (bridgeBusy) return;
@@ -492,15 +718,32 @@
                   return {};
                 });
                 appendLog("out", "api_id:1 → data.json 読込", body);
-                postBackToChild(ev.source, origin, res, body);
+                postBackToChild(ev.source, res, body);
               } catch (err) {
                 appendLog("out", "api_id:1 network_error", String(err));
                 ev.source.postMessage(
                   { error: true, status: 500, message: "network_error" },
-                  origin
+                  childReplyTarget
                 );
               } finally {
                 bridgeBusy = false;
+              }
+            })();
+            return;
+          }
+
+          if (isRunUserLogicRequest(ev.data)) {
+            void (async function () {
+              try {
+                var result = await runUserLogic(ev.data.content.code);
+                var out = { api_id: 3, content: { result: result } };
+                appendLog("out", "api_id:3 → worker OK", out);
+                ev.source.postMessage(out, childReplyTarget);
+              } catch (err) {
+                var msg = err instanceof Error ? err.message : String(err);
+                var outErr = { api_id: 3, content: { error: msg } };
+                appendLog("out", "api_id:3 → worker error", outErr);
+                ev.source.postMessage(outErr, childReplyTarget);
               }
             })();
             return;
@@ -521,12 +764,12 @@
                   return {};
                 });
                 appendLog("out", "api_id:2 → data.json 保存", body);
-                postBackToChild(ev.source, origin, res, body);
+                postBackToChild(ev.source, res, body);
               } catch (err) {
                 appendLog("out", "api_id:2 network_error", String(err));
                 ev.source.postMessage(
                   { error: true, status: 500, message: "network_error" },
-                  origin
+                  childReplyTarget
                 );
               } finally {
                 bridgeBusy = false;
@@ -534,6 +777,13 @@
             })();
             return;
           }
+        });
+        }
+
+        void fetchChildProgramList().then(function (list) {
+          boot(
+            list && list.length ? list : FALLBACK_CHILD_PROGRAMS
+          );
         });
       })();
     </script>
