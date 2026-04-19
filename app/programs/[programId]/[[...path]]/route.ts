@@ -39,7 +39,7 @@ function isUnderDir(root: string, target: string): boolean {
   return t === path.resolve(root) || t.startsWith(r);
 }
 
-/** `sites/<programId>` が無いときは `sites/default`（EC の任意 productId 向け） */
+/** `sites/<programId>` が存在するディレクトリのみ配信（未登録 ID は 404） */
 async function resolveBaseDir(
   programId: string,
   sitesRoot: string
@@ -52,15 +52,6 @@ async function resolveBaseDir(
     const st = await fs.stat(candidate);
     if (st.isDirectory()) {
       return candidate;
-    }
-  } catch {
-    /* fall through */
-  }
-  const fallback = path.resolve(sitesRoot, "default");
-  try {
-    const st = await fs.stat(fallback);
-    if (st.isDirectory()) {
-      return fallback;
     }
   } catch {
     return null;

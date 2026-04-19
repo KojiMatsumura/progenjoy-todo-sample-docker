@@ -22,7 +22,7 @@ export default function DebugAbusePage() {
   }, []);
 
   const redirectSibling = useCallback(() => {
-    window.location.assign("/programs/default/");
+    window.location.assign("/programs/todo-app/");
   }, []);
 
   const redirectExternal = useCallback(() => {
@@ -104,7 +104,7 @@ export default function DebugAbusePage() {
         </button>
         <button type="button" className={styles.btn} onClick={redirectSibling}>
           別 program（
-          <code className={styles.inlineCode}>/programs/default/</code> へ）
+          <code className={styles.inlineCode}>/programs/todo-app/</code> へ）
         </button>
       </section>
 

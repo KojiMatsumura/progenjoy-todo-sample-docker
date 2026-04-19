@@ -12,18 +12,6 @@ export type ChildProgram = {
 
 const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
   {
-    id: "default",
-    label: "ローカルデモ（app/programs/_sites/default）",
-    path: "/programs/default/",
-    iframeTitle: "ローカルデモプログラム",
-  },
-  {
-    id: "sample-game",
-    label: "sample-game（/programs/sample-game/）",
-    path: "/programs/sample-game/",
-    iframeTitle: "sample-game",
-  },
-  {
     id: "todo-app",
     label: "TODO（/programs/todo-app/）",
     path: "/programs/todo-app/",
@@ -525,7 +513,7 @@ export function ProgramRunner() {
             <div className="viewportInner">
               <iframe
                 ref={iframeRef}
-                src={selected?.path ?? "/programs/default/"}
+                src={selected?.path ?? "/programs/todo-app/"}
                 title={selected?.iframeTitle ?? "program"}
                 sandbox="allow-scripts"
               />
