@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { PrivacyModeToggle } from "@/components/PrivacyModeToggle";
+
 export type ChildProgram = {
   id: string;
   label: string;
@@ -33,6 +35,17 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
 
 const childReplyTarget = "*";
 const maxEntries = 200;
+
+/** program-ec-frontend の ProgramIframeBridge と同じ応答（子の api 1/2 をブロック） */
+const PRIVACY_MODE_RESPONSE = {
+  error: true,
+  status: 403,
+  message: "privacy_mode",
+} as const;
+
+type PrivacyReplayItem =
+  | { api_id: 1; content: null }
+  | { api_id: 2; content: Record<string, unknown> };
 
 function findProgramById(
   programs: ChildProgram[],
@@ -209,6 +222,12 @@ export function ProgramRunner() {
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">(
     "desktop"
   );
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [showPrivacyBlockedWarning, setShowPrivacyBlockedWarning] =
+    useState(false);
+  const privacyReplayQueueRef = useRef<PrivacyReplayItem[]>([]);
+  const prevPrivacyModeRef = useRef<boolean | null>(null);
+  const privacyModeRef = useRef(false);
 
   const clearLog = useCallback(() => {
     const logList = logListRef.current;
@@ -302,6 +321,80 @@ export function ProgramRunner() {
     selectedProgramIdRef.current = selected?.id ?? null;
   }, [selected?.id]);
 
+  useEffect(() => {
+    privacyModeRef.current = privacyMode;
+  }, [privacyMode]);
+
+  useEffect(() => {
+    privacyReplayQueueRef.current = [];
+  }, [selected?.id]);
+
+  const onPrivacyModeChange = useCallback((next: boolean) => {
+    setPrivacyMode(next);
+    if (!next) {
+      setShowPrivacyBlockedWarning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const prev = prevPrivacyModeRef.current;
+    prevPrivacyModeRef.current = privacyMode;
+
+    if (prev === null) return;
+    if (prev !== true || privacyMode !== false) return;
+    if (privacyReplayQueueRef.current.length === 0) return;
+
+    const queue = [...privacyReplayQueueRef.current];
+    privacyReplayQueueRef.current = [];
+
+    const programId = selectedProgramIdRef.current;
+    const cw = iframeRef.current?.contentWindow;
+    if (!programId || !cw) return;
+
+    void (async () => {
+      for (const item of queue) {
+        try {
+          if (item.api_id === 1) {
+            const url =
+              "/api/runner-data/" + encodeURIComponent(programId);
+            const res = await fetch(url, {
+              credentials: "same-origin",
+            });
+            const body = await res.json().catch(() => ({}));
+            appendLog(
+              "out",
+              "api_id:1 privacy replay → data/" + programId + "/data.json 読込",
+              body
+            );
+            postBackToChild(cw, res, body);
+          } else {
+            const url =
+              "/api/runner-data/" + encodeURIComponent(programId);
+            const res = await fetch(url, {
+              method: "PUT",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: item.content }),
+            });
+            const body = await res.json().catch(() => ({}));
+            appendLog(
+              "out",
+              "api_id:2 privacy replay → data/" + programId + "/data.json 保存",
+              body
+            );
+            postBackToChild(cw, res, body);
+          }
+        } catch (err) {
+          appendLog("out", "privacy replay network_error", String(err));
+          cw.postMessage(
+            { error: true, status: 500, message: "network_error" },
+            childReplyTarget
+          );
+        }
+      }
+    })();
+  }, [privacyMode, appendLog]);
+
   const applyTitle = useCallback(() => {
     const iframe = iframeRef.current;
     if (!selected || !iframe) return;
@@ -342,6 +435,20 @@ export function ProgramRunner() {
       appendLog("in", "postMessage received", ev.data);
 
       if (isApi042(ev.data)) {
+        if (privacyModeRef.current) {
+          privacyReplayQueueRef.current.push({ api_id: 1, content: null });
+          setShowPrivacyBlockedWarning(true);
+          appendLog(
+            "out",
+            "api_id:1 → blocked (privacy mode)",
+            PRIVACY_MODE_RESPONSE
+          );
+          (ev.source as Window).postMessage(
+            PRIVACY_MODE_RESPONSE,
+            childReplyTarget
+          );
+          return;
+        }
         const programId = selectedProgramIdRef.current;
         if (!programId) {
           appendLog("out", "api_id:1 → program 未選択", null);
@@ -399,6 +506,24 @@ export function ProgramRunner() {
       }
 
       if (isApi043(ev.data)) {
+        if (privacyModeRef.current) {
+          const data = ev.data as { content: Record<string, unknown> };
+          privacyReplayQueueRef.current.push({
+            api_id: 2,
+            content: data.content,
+          });
+          setShowPrivacyBlockedWarning(true);
+          appendLog(
+            "out",
+            "api_id:2 → blocked (privacy mode)",
+            PRIVACY_MODE_RESPONSE
+          );
+          (ev.source as Window).postMessage(
+            PRIVACY_MODE_RESPONSE,
+            childReplyTarget
+          );
+          return;
+        }
         const programId = selectedProgramIdRef.current;
         if (!programId) {
           appendLog("out", "api_id:2 → program 未選択", null);
@@ -556,57 +681,84 @@ export function ProgramRunner() {
         </div>
       </div>
 
-      <div className="grid">
-        <div
-          className={
-            "runnerCard" +
-            (previewMode === "mobile" ? " runnerCardMobilePreview" : "")
-          }
-        >
-          <div
-            className={
-              "viewport" +
-              (expanded ? " viewportExpanded" : "") +
-              (previewMode === "mobile" ? " viewportMobile" : "")
-            }
-          >
-            <div className="viewportInner">
-              <iframe
-                ref={iframeRef}
-                src={selected?.path ?? "/programs/todo-app/"}
-                title={selected?.iframeTitle ?? "program"}
-                sandbox="allow-scripts"
-              />
-            </div>
+      <div
+        className={
+          "privacyRunnerWrap" +
+          (privacyMode ? " privacyRunnerWrapActive" : "")
+        }
+      >
+        <div className="privacyRunnerToolbar">
+          <PrivacyModeToggle
+            enabled={privacyMode}
+            onEnabledChange={onPrivacyModeChange}
+          />
+        </div>
+        {showPrivacyBlockedWarning && (
+          <div className="privacyBlockedBanner" role="alert">
+            <p>プライバシーモードのため、データを保存できません。</p>
             <button
               type="button"
-              className="fsBtn"
-              onClick={toggleFs}
-              aria-label={
-                expanded
-                  ? "プログラム表示を通常サイズに戻す"
-                  : "プログラム表示を全画面にする"
-              }
+              className="privacyBlockedDismiss"
+              onClick={() => setShowPrivacyBlockedWarning(false)}
             >
-              {expanded ? <FsIconCollapse /> : <FsIconExpand />}
+              閉じる
             </button>
           </div>
-        </div>
+        )}
+        <div className="privacyRunnerInner">
+          <div className="grid">
+            <div
+              className={
+                "runnerCard" +
+                (previewMode === "mobile" ? " runnerCardMobilePreview" : "")
+              }
+            >
+              <div
+                className={
+                  "viewport" +
+                  (expanded ? " viewportExpanded" : "") +
+                  (previewMode === "mobile" ? " viewportMobile" : "")
+                }
+              >
+                <div className="viewportInner">
+                  <iframe
+                    ref={iframeRef}
+                    src={selected?.path ?? "/programs/todo-app/"}
+                    title={selected?.iframeTitle ?? "program"}
+                    sandbox="allow-scripts"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="fsBtn"
+                  onClick={toggleFs}
+                  aria-label={
+                    expanded
+                      ? "プログラム表示を通常サイズに戻す"
+                      : "プログラム表示を全画面にする"
+                  }
+                >
+                  {expanded ? <FsIconCollapse /> : <FsIconExpand />}
+                </button>
+              </div>
+            </div>
 
-        <aside className="aside">
-          <div className="logPanel">
-            <div className="logHead">
-              <h2>通信ログ</h2>
-            </div>
-            <div className="logBody">
-              <p className="logEmpty" ref={logEmptyRef}>
-                まだログはありません。プログラムが API
-                を呼び出すとここに表示されます。
-              </p>
-              <ul className="logList" ref={logListRef} hidden />
-            </div>
+            <aside className="aside">
+              <div className="logPanel">
+                <div className="logHead">
+                  <h2>通信ログ</h2>
+                </div>
+                <div className="logBody">
+                  <p className="logEmpty" ref={logEmptyRef}>
+                    まだログはありません。プログラムが API
+                    を呼び出すとここに表示されます。
+                  </p>
+                  <ul className="logList" ref={logListRef} hidden />
+                </div>
+              </div>
+            </aside>
           </div>
-        </aside>
+        </div>
       </div>
     </main>
   );
