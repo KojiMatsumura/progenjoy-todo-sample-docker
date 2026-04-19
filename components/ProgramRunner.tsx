@@ -23,6 +23,12 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
     path: "/programs/sample-game/",
     iframeTitle: "sample-game",
   },
+  {
+    id: "todo-app",
+    label: "TODO（/programs/todo-app/）",
+    path: "/programs/todo-app/",
+    iframeTitle: "TODO リスト",
+  },
 ];
 
 const childReplyTarget = "*";
@@ -430,7 +436,6 @@ export function ProgramRunner() {
         <label htmlFor="program-select">表示する子プログラム</label>
         <select
           id="program-select"
-          aria-describedby="program-hint"
           disabled={!programs || !selected}
           value={selected?.id ?? ""}
           onChange={onSelectChange}
@@ -442,12 +447,6 @@ export function ProgramRunner() {
             </option>
           ))}
         </select>
-        <p className="hint" id="program-hint">
-          一覧は <code>/api/child-programs</code> が{" "}
-          <code>app/programs/_sites</code> 直下のフォルダ名を programId として自動生成します。URL は{" "}
-          <code>/programs/&lt;programId&gt;/</code> です（フォルダが無い
-          programId は <code>default</code> にフォールバック）。
-        </p>
       </div>
 
       <div className="grid">

@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
+  /**
+   * Next の自動トレーリングスラッシュ 308 リダイレクトを切る。
+   * 過去に逆方向の 308 がブラウザキャッシュに残っているとループになるため、
+   * 親 (`/`) も子 (`/programs/<id>/…`) も「リダイレクトしない」で統一する。
+   * 相対パス問題は各 HTML 側で `<base href>` を入れて解決する。
+   */
+  skipTrailingSlashRedirect: true,
   async redirects() {
     return [
       /**

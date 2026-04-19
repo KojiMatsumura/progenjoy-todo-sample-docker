@@ -107,10 +107,33 @@ export async function GET(
 
   try {
     const buf = await fs.readFile(target);
+
+    /**
+     * HTML のときだけ `<base href="/programs/<id>/">` を注入する。
+     * `skipTrailingSlashRedirect: true` にしてリダイレクトを排除した結果、
+     * URL が `/programs/<id>` でも `/programs/<id>/` でも配信されるため、
+     * どちらでも相対パス (`todo.css` `todo.js` 等) が正しく解決できるようにする。
+     */
+    const contentType = mimeFor(target);
+    if (contentType.startsWith("text/html")) {
+      const html = buf.toString("utf8");
+      const baseTag = `<base href="/programs/${programId}/">`;
+      const injected = html.includes("<base ")
+        ? html
+        : html.replace(/<head(\s[^>]*)?>/i, (m) => `${m}\n    ${baseTag}`);
+      return new NextResponse(injected, {
+        status: 200,
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
     return new NextResponse(buf, {
       status: 200,
       headers: {
-        "Content-Type": mimeFor(target),
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=0, must-revalidate",
       },
     });
