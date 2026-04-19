@@ -35,6 +35,12 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
     path: "/programs/prime-checker/",
     iframeTitle: "素数判定",
   },
+  {
+    id: "debug-abuse",
+    label: "デバッグ：不正行為テスト（/programs/debug-abuse/）",
+    path: "/programs/debug-abuse/",
+    iframeTitle: "デバッグ：不正行為テスト",
+  },
 ];
 
 const childReplyTarget = "*";
@@ -65,6 +71,24 @@ function formatTime(d: Date): string {
     "." +
     String(d.getUTCMilliseconds()).padStart(3, "0")
   );
+}
+
+/** 巨大な postMessage をログにそのまま出すと固まるため切り詰める */
+const LOG_DATA_MAX_CHARS = 4000;
+
+function stringifyForLog(data: unknown): string {
+  try {
+    const s = JSON.stringify(data);
+    if (s.length <= LOG_DATA_MAX_CHARS) return s;
+    return (
+      s.slice(0, LOG_DATA_MAX_CHARS) +
+      "… （省略、全長 " +
+      s.length +
+      " 文字）"
+    );
+  } catch {
+    return String(data);
+  }
 }
 
 function isApi042(data: unknown): boolean {
@@ -223,7 +247,7 @@ export function ProgramRunner() {
         const pre = document.createElement("span");
         pre.className = "logData";
         try {
-          pre.textContent = JSON.stringify(data);
+          pre.textContent = stringifyForLog(data);
         } catch {
           pre.textContent = String(data);
         }
