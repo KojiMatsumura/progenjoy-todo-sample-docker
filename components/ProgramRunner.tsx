@@ -29,6 +29,12 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
     path: "/programs/todo-app/",
     iframeTitle: "TODO リスト",
   },
+  {
+    id: "prime-checker",
+    label: "素数判定（/programs/prime-checker/）",
+    path: "/programs/prime-checker/",
+    iframeTitle: "素数判定",
+  },
 ];
 
 const childReplyTarget = "*";
