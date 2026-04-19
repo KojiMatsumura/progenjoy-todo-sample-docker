@@ -14,5 +14,8 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/programs/:path*"],
+  matcher: [
+    "/programs/:programId",
+    "/programs/:programId/:path*",
+  ],
 };
