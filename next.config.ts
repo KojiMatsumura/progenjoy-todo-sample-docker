@@ -6,34 +6,30 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        source: "/programs/:id",
+        source: "/programs/:programId",
+        destination: "/programs/:programId/",
+        permanent: false,
+      },
+      /** 旧 `/child/…` `/program/…` → `/programs/…` */
+      {
+        source: "/child/:id",
         destination: "/programs/:id/",
         permanent: false,
       },
       {
-        source: "/program/:name",
-        destination: "/program/:name/",
+        source: "/child/:id/:path+",
+        destination: "/programs/:id/:path+",
         permanent: false,
       },
-    ];
-  },
-  async rewrites() {
-    return [
       {
-        source: "/programs/:productId/",
-        destination: "/children/_default/",
+        source: "/program/:repo",
+        destination: "/programs/:repo/",
+        permanent: false,
       },
       {
-        source: "/programs/:productId/:path*",
-        destination: "/children/_default/:path*",
-      },
-      {
-        source: "/program/:repo/",
-        destination: "/children/:repo/",
-      },
-      {
-        source: "/program/:repo/:path*",
-        destination: "/children/:repo/:path*",
+        source: "/program/:repo/:path+",
+        destination: "/programs/:repo/:path+",
+        permanent: false,
       },
     ];
   },

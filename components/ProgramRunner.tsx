@@ -13,14 +13,14 @@ export type ChildProgram = {
 const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
   {
     id: "default",
-    label: "ローカルデモ (_default)",
-    path: "/programs/local-demo/",
+    label: "ローカルデモ（app/programs/_sites/default）",
+    path: "/programs/default/",
     iframeTitle: "ローカルデモプログラム",
   },
   {
     id: "sample-game",
-    label: "sample-game (/program/sample-game/)",
-    path: "/program/sample-game/",
+    label: "sample-game（/programs/sample-game/）",
+    path: "/programs/sample-game/",
     iframeTitle: "sample-game",
   },
 ];
@@ -444,9 +444,9 @@ export function ProgramRunner() {
         </select>
         <p className="hint" id="program-hint">
           一覧は <code>/api/child-programs</code> が{" "}
-          <code>public/children</code> 直下のフォルダを走査して自動生成します（
-          <code>_default</code> → <code>/programs/&lt;productId&gt;/</code>
-          、それ以外 → <code>/program/&lt;フォルダ名&gt;/</code>）。
+          <code>app/programs/_sites</code> 直下のフォルダ名を programId として自動生成します。URL は{" "}
+          <code>/programs/&lt;programId&gt;/</code> です（フォルダが無い
+          programId は <code>default</code> にフォールバック）。
         </p>
       </div>
 
@@ -460,7 +460,7 @@ export function ProgramRunner() {
             <div className="viewportInner">
               <iframe
                 ref={iframeRef}
-                src={selected?.path ?? "/programs/local-demo/"}
+                src={selected?.path ?? "/programs/default/"}
                 title={selected?.iframeTitle ?? "program"}
                 sandbox="allow-scripts"
               />

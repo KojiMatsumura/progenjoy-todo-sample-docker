@@ -5,11 +5,9 @@ services:
       - "${PROGRAM_RUNNER_PORT:-8787}:3000"
     environment:
       DATA_FILE: /app/data.json
-      CHILDREN_DIR: /app/public/children
-      DEFAULT_PROGRAMS_PRODUCT_ID: local-demo
+      # リポジトリでは app/programs/_sites。Docker の cwd は /app のため二重 app
+      PROGRAM_SITES_DIR: /app/app/programs/_sites
       PORT: 3000
     volumes:
-      # リポジトリルートの data.json を永続化（api_id:2 の保存先）
       - ./data.json:/app/data.json
-      # 子プログラムを再ビルドなしで差し替え可能にする場合
-      - ./public/children:/app/public/children:ro
+      - ./app/programs/_sites:/app/app/programs/_sites:ro

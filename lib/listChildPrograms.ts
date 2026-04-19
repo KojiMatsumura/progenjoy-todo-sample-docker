@@ -7,14 +7,17 @@ export type ChildProgramEntry = {
   iframeTitle: string;
 };
 
+/**
+ * `app/programs/_sites/<programId>/` 直下のディレクトリ名を programId とし、URL は `/programs/<programId>/`。
+ * （存在しない programId はルート側で `default` にフォールバック）
+ */
 export async function listChildPrograms(
-  childrenDir: string,
-  defaultProgramsProductId: string
+  sitesDir: string
 ): Promise<ChildProgramEntry[]> {
   const programs: ChildProgramEntry[] = [];
   let entries;
   try {
-    entries = await fs.readdir(childrenDir, { withFileTypes: true });
+    entries = await fs.readdir(sitesDir, { withFileTypes: true });
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && e.code === "ENOENT") {
       return programs;
@@ -27,21 +30,15 @@ export async function listChildPrograms(
     .sort((a, b) => a.localeCompare(b));
 
   for (const dirName of dirNames) {
-    if (dirName === "_default") {
-      programs.push({
-        id: "default",
-        label: "ローカルデモ (_default)",
-        path: `/programs/${defaultProgramsProductId}/`,
-        iframeTitle: "ローカルデモプログラム",
-      });
-      continue;
-    }
     const enc = encodeURIComponent(dirName);
+    const isDefault = dirName === "default";
     programs.push({
       id: dirName,
-      label: `${dirName} (/program/${dirName}/)`,
-      path: `/program/${enc}/`,
-      iframeTitle: dirName,
+      label: isDefault
+        ? "ローカルデモ（app/programs/_sites/default）"
+        : `${dirName}（/programs/${dirName}/）`,
+      path: `/programs/${enc}/`,
+      iframeTitle: isDefault ? "ローカルデモプログラム" : dirName,
     });
   }
 

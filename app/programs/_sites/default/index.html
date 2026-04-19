@@ -3,20 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ローカルプログラムランナー（_default）</title>
+    <title>ローカルプログラムランナー（default）</title>
     <link rel="stylesheet" href="default.css" />
     <script src="default.js" defer></script>
   </head>
   <body>
     <h1>ローカル Docker プログラムランナー</h1>
     <p>
-      このページは <code>children/_default/</code> から配信されています。任意の
-      <code>productId</code> に対して
-      <code>/programs/&lt;id&gt;/</code> で同じ内容が表示されます。
+      このページは <code>app/programs/_sites/default/</code> から配信されています。URL は
+      <code>/programs/default/</code> または、フォルダ名と一致しない
+      <code>programId</code>（例: EC の商品 UUID）では同じ内容にフォールバックされます。
     </p>
     <p>
-      子リポジトリ単位の URL は
-      <a href="/program/sample-game/">/program/sample-game/</a> を参照してください。
+      別プログラムの例:
+      <a href="/programs/sample-game/">/programs/sample-game/</a>
     </p>
 
     <div class="panel">

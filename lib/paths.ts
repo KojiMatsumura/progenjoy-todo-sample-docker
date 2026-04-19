@@ -4,12 +4,19 @@ export function getDataFilePath(): string {
   return process.env.DATA_FILE ?? path.join(process.cwd(), "data.json");
 }
 
-export function getChildrenDir(): string {
+/**
+ * ユーザー作成プログラム（iframe 子）の置き場。
+ * `app/programs/_sites/<programId>/`（`_` 始まりは Next のルート対象外）
+ */
+export function getProgramSitesDir(): string {
   return (
-    process.env.CHILDREN_DIR ?? path.join(process.cwd(), "public", "children")
+    process.env.PROGRAM_SITES_DIR ??
+    process.env.CHILDREN_DIR ??
+    path.join(process.cwd(), "app", "programs", "_sites")
   );
 }
 
-export function getDefaultProgramsProductId(): string {
-  return process.env.DEFAULT_PROGRAMS_PRODUCT_ID ?? "local-demo";
+/** @deprecated 互換のため。getProgramSitesDir と同じ */
+export function getChildrenDir(): string {
+  return getProgramSitesDir();
 }
