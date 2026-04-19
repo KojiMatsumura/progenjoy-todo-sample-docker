@@ -304,12 +304,30 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
+  justify-content: flex-start;
+  gap: 0.75rem 1rem;
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
   border-radius: 0.75rem;
   border: 1px solid var(--gray-200);
   background: var(--gray-50);
+}
+
+.programBarMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.programBarPreview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  flex: 0 0 auto;
 }
 
 .programBar label {
@@ -339,4 +357,121 @@ a:hover {
   font-size: 0.75rem;
   color: var(--gray-500);
   flex-basis: 100%;
+}
+
+/* プレビュー PC / スマホ 切替（programBar 内で左詰め） */
+.previewBarLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.previewSwitchRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.previewSwitchCaption {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  transition: color 0.15s, font-weight 0.15s;
+}
+
+.previewSwitchCaptionActive {
+  color: var(--gray-900);
+  font-weight: 600;
+}
+
+.previewSwitch {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.previewSwitch:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
+.previewSwitchTrack {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--gray-300);
+  transition: background 0.2s;
+}
+
+.previewSwitch[aria-checked="true"] .previewSwitchTrack {
+  background: var(--orange);
+}
+
+.previewSwitchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.5rem - 4px);
+  height: calc(1.5rem - 4px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+
+.previewSwitch[aria-checked="true"] .previewSwitchThumb {
+  transform: translateX(1.25rem);
+}
+
+/* スマホ風プレビュー：カード全体を iframe 幅にぴったり縮小（外側の枠も小さく） */
+/* fit-content + 子の width: min(100%, …) は shrink-to-fit で幅 0 になり iframe が消えるため、列幅を確定させる */
+.runnerCard.runnerCardMobilePreview {
+  width: 100%;
+  max-width: 433px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 0.65rem;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.08);
+}
+
+/* 短辺 ~200px を上限にすると長辺は約 433px（19.5/9）。枠は runnerCard 側に集約 */
+.viewport.viewportMobile:not(.viewportExpanded) {
+  aspect-ratio: 19.5 / 9;
+  width: min(100%, 433px);
+  margin-left: auto;
+  margin-right: auto;
+  max-height: min(32vh, 200px);
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.viewport.viewportMobile.viewportExpanded {
+  aspect-ratio: unset;
+  justify-content: center;
+  align-items: center;
+  background: #e5e7eb;
+  padding: 0.75rem;
+}
+
+.viewport.viewportMobile.viewportExpanded .viewportInner {
+  position: relative;
+  inset: auto;
+  width: min(433px, calc(100vw - 1.5rem));
+  max-width: 100%;
+  aspect-ratio: 19.5 / 9;
+  max-height: min(36vh, 200px);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.22);
+  border: 1px solid var(--gray-300);
+  flex: 0 0 auto;
 }

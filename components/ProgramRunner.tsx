@@ -205,6 +205,10 @@ export function ProgramRunner() {
   const [programs, setPrograms] = useState<ChildProgram[] | null>(null);
   const [selected, setSelected] = useState<ChildProgram | null>(null);
   const [expanded, setExpanded] = useState(false);
+  /** iframe プレビュー: ワイド（16:10）／スマホ風ランドスケープ（19.5:9） */
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">(
+    "desktop"
+  );
 
   const clearLog = useCallback(() => {
     const logList = logListRef.current;
@@ -487,27 +491,83 @@ export function ProgramRunner() {
       </p>
 
       <div className="programBar">
-        <label htmlFor="program-select">表示する子プログラム</label>
-        <select
-          id="program-select"
-          disabled={!programs || !selected}
-          value={selected?.id ?? ""}
-          onChange={onSelectChange}
-        >
-          {!programs && <option value="">一覧を読み込み中…</option>}
-          {programs?.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        <div className="programBarMain">
+          <label htmlFor="program-select">表示するプログラム</label>
+          <select
+            id="program-select"
+            disabled={!programs || !selected}
+            value={selected?.id ?? ""}
+            onChange={onSelectChange}
+          >
+            {!programs && <option value="">一覧を読み込み中…</option>}
+            {programs?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="programBarPreview">
+          <span className="previewBarLabel" id="preview-mode-label">
+            プレビュー
+          </span>
+          <div
+            className="previewSwitchRow"
+            role="group"
+            aria-labelledby="preview-mode-label"
+          >
+            <span
+              className={
+                "previewSwitchCaption" +
+                (previewMode === "desktop"
+                  ? " previewSwitchCaptionActive"
+                  : "")
+              }
+            >
+              パソコン
+            </span>
+            <button
+              type="button"
+              className="previewSwitch"
+              role="switch"
+              aria-checked={previewMode === "mobile"}
+              aria-label={
+                previewMode === "mobile"
+                  ? "スマホサイズのプレビュー（クリックでパソコン）"
+                  : "パソコンサイズのプレビュー（クリックでスマホ）"
+              }
+              onClick={() =>
+                setPreviewMode((m) => (m === "desktop" ? "mobile" : "desktop"))
+              }
+            >
+              <span className="previewSwitchTrack" aria-hidden>
+                <span className="previewSwitchThumb" />
+              </span>
+            </button>
+            <span
+              className={
+                "previewSwitchCaption" +
+                (previewMode === "mobile" ? " previewSwitchCaptionActive" : "")
+              }
+            >
+              スマホ
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="grid">
-        <div className="runnerCard">
+        <div
+          className={
+            "runnerCard" +
+            (previewMode === "mobile" ? " runnerCardMobilePreview" : "")
+          }
+        >
           <div
             className={
-              "viewport" + (expanded ? " viewportExpanded" : "")
+              "viewport" +
+              (expanded ? " viewportExpanded" : "") +
+              (previewMode === "mobile" ? " viewportMobile" : "")
             }
           >
             <div className="viewportInner">
