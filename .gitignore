@@ -4,5 +4,6 @@
 node_modules
 .next
 
-# api_id:2 で書き出すローカル永続化（リポジトリルート）
+# api_id:1/2 で書き出すローカル永続化
 /data.json
+/data/

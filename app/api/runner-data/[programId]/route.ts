@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getDataFilePath } from "@/lib/paths";
+import {
+  getProgramDataFilePath,
+  isValidProgramIdForData,
+} from "@/lib/paths";
 
-async function readStore() {
-  const file = getDataFilePath();
+async function readStore(programId: string) {
+  const file = getProgramDataFilePath(programId);
   try {
     const txt = await fs.readFile(file, "utf8");
     return JSON.parse(txt) as unknown;
@@ -16,16 +19,30 @@ async function readStore() {
   }
 }
 
-export async function GET() {
+export async function GET(
+  _req: Request,
+  segment: { params: Promise<{ programId: string }> }
+) {
+  const { programId } = await segment.params;
+  if (!isValidProgramIdForData(programId)) {
+    return NextResponse.json({ error: "invalid programId" }, { status: 400 });
+  }
   try {
-    const data = await readStore();
+    const data = await readStore(programId);
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
 }
 
-export async function PUT(req: Request) {
+export async function PUT(
+  req: Request,
+  segment: { params: Promise<{ programId: string }> }
+) {
+  const { programId } = await segment.params;
+  if (!isValidProgramIdForData(programId)) {
+    return NextResponse.json({ error: "invalid programId" }, { status: 400 });
+  }
   try {
     let body: unknown;
     try {
@@ -46,8 +63,10 @@ export async function PUT(req: Request) {
         { status: 400 }
       );
     }
-    const out = { content: (body as { content: Record<string, unknown> }).content };
-    const file = getDataFilePath();
+    const out = {
+      content: (body as { content: Record<string, unknown> }).content,
+    };
+    const file = getProgramDataFilePath(programId);
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, JSON.stringify(out, null, 2), "utf8");
     return NextResponse.json(out);

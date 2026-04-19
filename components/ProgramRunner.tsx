@@ -181,6 +181,8 @@ export function ProgramRunner() {
   const logListRef = useRef<HTMLUListElement>(null);
   const logEmptyRef = useRef<HTMLParagraphElement>(null);
   const bridgeBusyRef = useRef(false);
+  /** postMessage ハンドラはクロージャが古いままになりがちなので、常に最新の programId を参照する */
+  const selectedProgramIdRef = useRef<string | null>(null);
 
   const [programs, setPrograms] = useState<ChildProgram[] | null>(null);
   const [selected, setSelected] = useState<ChildProgram | null>(null);
@@ -274,6 +276,10 @@ export function ProgramRunner() {
     };
   }, []);
 
+  useEffect(() => {
+    selectedProgramIdRef.current = selected?.id ?? null;
+  }, [selected?.id]);
+
   const applyTitle = useCallback(() => {
     const iframe = iframeRef.current;
     if (!selected || !iframe) return;
@@ -314,15 +320,30 @@ export function ProgramRunner() {
       appendLog("in", "postMessage received", ev.data);
 
       if (isApi042(ev.data)) {
+        const programId = selectedProgramIdRef.current;
+        if (!programId) {
+          appendLog("out", "api_id:1 → program 未選択", null);
+          (ev.source as Window).postMessage(
+            { error: true, status: 400, message: "no_program_selected" },
+            childReplyTarget
+          );
+          return;
+        }
         if (bridgeBusyRef.current) return;
         bridgeBusyRef.current = true;
         void (async () => {
           try {
-            const res = await fetch("/api/runner-data", {
+            const url =
+              "/api/runner-data/" + encodeURIComponent(programId);
+            const res = await fetch(url, {
               credentials: "same-origin",
             });
             const body = await res.json().catch(() => ({}));
-            appendLog("out", "api_id:1 → data.json 読込", body);
+            appendLog(
+              "out",
+              "api_id:1 → data/" + programId + "/data.json 読込",
+              body
+            );
             postBackToChild(ev.source as Window, res, body);
           } catch (err) {
             appendLog("out", "api_id:1 network_error", String(err));
@@ -356,19 +377,34 @@ export function ProgramRunner() {
       }
 
       if (isApi043(ev.data)) {
+        const programId = selectedProgramIdRef.current;
+        if (!programId) {
+          appendLog("out", "api_id:2 → program 未選択", null);
+          (ev.source as Window).postMessage(
+            { error: true, status: 400, message: "no_program_selected" },
+            childReplyTarget
+          );
+          return;
+        }
         if (bridgeBusyRef.current) return;
         bridgeBusyRef.current = true;
         void (async () => {
           try {
             const data = ev.data as { content: Record<string, unknown> };
-            const res = await fetch("/api/runner-data", {
+            const url =
+              "/api/runner-data/" + encodeURIComponent(programId);
+            const res = await fetch(url, {
               method: "PUT",
               credentials: "same-origin",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ content: data.content }),
             });
             const body = await res.json().catch(() => ({}));
-            appendLog("out", "api_id:2 → data.json 保存", body);
+            appendLog(
+              "out",
+              "api_id:2 → data/" + programId + "/data.json 保存",
+              body
+            );
             postBackToChild(ev.source as Window, res, body);
           } catch (err) {
             appendLog("out", "api_id:2 network_error", String(err));
