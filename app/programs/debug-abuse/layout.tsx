@@ -3,7 +3,7 @@ import "./assets/debug-abuse-globals.css";
 import styles from "./assets/debug-abuse.module.css";
 
 export const metadata: Metadata = {
-  title: "デバッグ：不正行為テスト",
+  title: "不正行為テスト",
   description: "iframe 検証用（リダイレクト・postMessage 負荷など）",
 };
 

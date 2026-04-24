@@ -82,9 +82,9 @@ export default function DebugAbusePage() {
 
   return (
     <div className={styles.app}>
-      <h1 className={styles.pageTitle}>デバッグ：不正行為テスト</h1>
+      <h1 className={styles.pageTitle}>不正行為テスト</h1>
       <p className={styles.warn}>
-        開発・検証用です。本番では使用しないでください。
+        禁止されている行為をお伝えするためにこのプログラムを作っています。以下のようなことをするプログラムをアップロードするとアカウント停止になる場合があるため、本番では決して使用しないでください。
       </p>
 
       <section className={styles.panel}>

@@ -27,14 +27,44 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
   },
   {
     id: "debug-abuse",
-    label: "デバッグ：不正行為テスト（/programs/debug-abuse/）",
+    label: "不正行為テスト（/programs/debug-abuse/）",
     path: "/programs/debug-abuse/",
-    iframeTitle: "デバッグ：不正行為テスト",
+    iframeTitle: "不正行為テスト",
   },
 ];
 
 const childReplyTarget = "*";
 const maxEntries = 200;
+
+const DIRECTORY_ESCAPE_WARNING =
+  "不正なパスにリダイレクトしています。作成したプログラムの範囲外へのリダイレクトは許可されていません。";
+
+function safeDecodePathnameSegment(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
+/** `selected.path` から許可ディレクトリの pathname プレフィックス（末尾 `/`）を得る */
+function programDirectoryPrefixFromPath(pathFromSelected: string): string {
+  const pathname = new URL(pathFromSelected, "http://localhost").pathname;
+  const decoded = safeDecodePathnameSegment(pathname);
+  return decoded.endsWith("/") ? decoded : decoded + "/";
+}
+
+/** iframe の pathname が、当該プログラムの `/programs/<id>/` 配下か（同一も可） */
+function isIframePathWithinProgramRoot(
+  iframePathname: string,
+  programPathFromSelected: string
+): boolean {
+  const root = programDirectoryPrefixFromPath(programPathFromSelected);
+  const base = root.slice(0, -1);
+  const decoded = safeDecodePathnameSegment(iframePathname);
+  if (decoded === base) return true;
+  return decoded.startsWith(root);
+}
 
 /** program-ec-frontend の ProgramIframeBridge と同じ応答（子の api 1/2 をブロック） */
 const PRIVACY_MODE_RESPONSE = {
@@ -214,6 +244,8 @@ export function ProgramRunner() {
   const bridgeBusyRef = useRef(false);
   /** postMessage ハンドラはクロージャが古いままになりがちなので、常に最新の programId を参照する */
   const selectedProgramIdRef = useRef<string | null>(null);
+  /** iframe の src と同じ基準で許可ルートを onLoad 時に照合する */
+  const selectedProgramPathRef = useRef<string>("/programs/todo-app/");
 
   const [programs, setPrograms] = useState<ChildProgram[] | null>(null);
   const [selected, setSelected] = useState<ChildProgram | null>(null);
@@ -225,6 +257,9 @@ export function ProgramRunner() {
   const [privacyMode, setPrivacyMode] = useState(false);
   const [showPrivacyBlockedWarning, setShowPrivacyBlockedWarning] =
     useState(false);
+  /** 非 null のときディレクトリ警告を表示。値は不正な遷移先の絶対パス（`location.href`）または取得不可の説明 */
+  const [directoryEscapeAbsoluteUrl, setDirectoryEscapeAbsoluteUrl] =
+    useState<string | null>(null);
   const privacyReplayQueueRef = useRef<PrivacyReplayItem[]>([]);
   const prevPrivacyModeRef = useRef<boolean | null>(null);
   const privacyModeRef = useRef(false);
@@ -320,6 +355,15 @@ export function ProgramRunner() {
   useEffect(() => {
     selectedProgramIdRef.current = selected?.id ?? null;
   }, [selected?.id]);
+
+  useEffect(() => {
+    selectedProgramPathRef.current =
+      selected?.path ?? "/programs/todo-app/";
+  }, [selected?.path]);
+
+  useEffect(() => {
+    setDirectoryEscapeAbsoluteUrl(null);
+  }, [selected?.path]);
 
   useEffect(() => {
     privacyModeRef.current = privacyMode;
@@ -427,6 +471,26 @@ export function ProgramRunner() {
     },
     [programs, clearLog, setProgramQueryInUrl]
   );
+
+  const onIframeLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    const programPath = selectedProgramPathRef.current;
+    if (!iframe || !programPath) return;
+    try {
+      const cw = iframe.contentWindow;
+      if (!cw) return;
+      const pathname = cw.location.pathname;
+      if (!isIframePathWithinProgramRoot(pathname, programPath)) {
+        setDirectoryEscapeAbsoluteUrl(cw.location.href);
+      } else {
+        setDirectoryEscapeAbsoluteUrl(null);
+      }
+    } catch {
+      setDirectoryEscapeAbsoluteUrl(
+        "（取得不可: 別オリジンへ遷移したなどの理由で iframe の表示 URL を参照できません）"
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
@@ -725,9 +789,32 @@ export function ProgramRunner() {
                     ref={iframeRef}
                     src={selected?.path ?? "/programs/todo-app/"}
                     title={selected?.iframeTitle ?? "program"}
-                    sandbox="allow-scripts"
+                    sandbox="allow-scripts allow-same-origin"
+                    onLoad={onIframeLoad}
                   />
                 </div>
+                {directoryEscapeAbsoluteUrl != null && (
+                  <div className="directoryEscapeOverlay" role="alert">
+                    <div className="directoryEscapeOverlayInner">
+                      <p className="directoryEscapeOverlayText">
+                        {DIRECTORY_ESCAPE_WARNING}
+                      </p>
+                      <p className="directoryEscapeOverlayPathLabel">
+                        不正なリダイレクト先の絶対パス
+                      </p>
+                      <p className="directoryEscapeOverlayPathValue">
+                        {directoryEscapeAbsoluteUrl}
+                      </p>
+                      <button
+                        type="button"
+                        className="directoryEscapeOverlayDismiss"
+                        onClick={() => setDirectoryEscapeAbsoluteUrl(null)}
+                      >
+                        閉じる
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="fsBtn"
