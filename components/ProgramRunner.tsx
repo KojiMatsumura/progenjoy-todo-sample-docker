@@ -1080,47 +1080,47 @@ export function ProgramRunner() {
         </div>
       </div>
 
-      <div
-        className={
-          "privacyRunnerWrap" +
-          (privacyMode ? " privacyRunnerWrapActive" : "")
-        }
-      >
-        <div className="privacyRunnerToolbar">
-          <PrivacyModeToggle
-            enabled={privacyMode}
-            onEnabledChange={onPrivacyModeChange}
-          />
-        </div>
-        {showPrivacyBlockedWarning && (
-          <div className="privacyBlockedBanner" role="alert">
-            <p>プライバシーモードのため、データを保存できません。</p>
-            <button
-              type="button"
-              className="privacyBlockedDismiss"
-              onClick={() => setShowPrivacyBlockedWarning(false)}
-            >
-              閉じる
-            </button>
+      <div className="grid">
+        <div
+          className={
+            "privacyRunnerWrap" +
+            (privacyMode ? " privacyRunnerWrapActive" : "")
+          }
+        >
+          <div className="privacyRunnerToolbar">
+            <PrivacyModeToggle
+              enabled={privacyMode}
+              onEnabledChange={onPrivacyModeChange}
+            />
           </div>
-        )}
-        {iframeSuspendedMessage != null && (
-          <div
-            className="privacyBlockedBanner mainThreadJankBanner"
-            role="alert"
-          >
-            <p>{iframeSuspendedMessage}</p>
-            <button
-              type="button"
-              className="privacyBlockedDismiss"
-              onClick={() => setIframeSuspendedMessage(null)}
+          {showPrivacyBlockedWarning && (
+            <div className="privacyBlockedBanner" role="alert">
+              <p>プライバシーモードのため、データを保存できません。</p>
+              <button
+                type="button"
+                className="privacyBlockedDismiss"
+                onClick={() => setShowPrivacyBlockedWarning(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          )}
+          {iframeSuspendedMessage != null && (
+            <div
+              className="privacyBlockedBanner mainThreadJankBanner"
+              role="alert"
             >
-              閉じる
-            </button>
-          </div>
-        )}
-        <div className="privacyRunnerInner">
-          <div className="grid">
+              <p>{iframeSuspendedMessage}</p>
+              <button
+                type="button"
+                className="privacyBlockedDismiss"
+                onClick={() => setIframeSuspendedMessage(null)}
+              >
+                閉じる
+              </button>
+            </div>
+          )}
+          <div className="privacyRunnerInner">
             <div
               className={
                 "runnerCard" +
@@ -1230,23 +1230,23 @@ export function ProgramRunner() {
                 </button>
               </div>
             </div>
-
-            <aside className="aside">
-              <div className="logPanel">
-                <div className="logHead">
-                  <h2>通信ログ</h2>
-                </div>
-                <div className="logBody">
-                  <p className="logEmpty" ref={logEmptyRef}>
-                    まだログはありません。プログラムが API
-                    を呼び出すとここに表示されます。
-                  </p>
-                  <ul className="logList" ref={logListRef} hidden />
-                </div>
-              </div>
-            </aside>
           </div>
         </div>
+
+        <aside className="aside">
+          <div className="logPanel">
+            <div className="logHead">
+              <h2>通信ログ</h2>
+            </div>
+            <div className="logBody">
+              <p className="logEmpty" ref={logEmptyRef}>
+                まだログはありません。プログラムが API
+                を呼び出すとここに表示されます。
+              </p>
+              <ul className="logList" ref={logListRef} hidden />
+            </div>
+          </div>
+        </aside>
       </div>
     </main>
   );
