@@ -365,14 +365,26 @@ a:hover {
   border-color: var(--gray-400);
 }
 
+.programQualityBtn.programQualityBtnDanger {
+  border-color: rgb(180 35 24 / 0.5);
+  background: rgb(254 242 242);
+  color: #b42318;
+}
+
+.programQualityBtn.programQualityBtnDanger:hover:not(:disabled) {
+  background: rgb(254 226 226);
+  border-color: rgb(180 35 24 / 0.75);
+}
+
 .programQualityBtn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 .programQualityWarn {
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.35;
   color: #b42318;
 }
 

@@ -1063,7 +1063,9 @@ export function ProgramRunner() {
           <span className="programBarQualityLabel">ソース品質</span>
           <button
             type="button"
-            className="programQualityBtn"
+            className={
+              "programQualityBtn" + (qualityFailed ? " programQualityBtnDanger" : "")
+            }
             disabled={!selected || qualityBusy || iframeSrcOverride !== null}
             onClick={() => void runProgramQuality()}
           >
