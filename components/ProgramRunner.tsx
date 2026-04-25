@@ -154,13 +154,13 @@ function pad2(n: number): string {
 
 function formatTime(d: Date): string {
   return (
-    pad2(d.getUTCHours()) +
+    pad2(d.getHours()) +
     ":" +
-    pad2(d.getUTCMinutes()) +
+    pad2(d.getMinutes()) +
     ":" +
-    pad2(d.getUTCSeconds()) +
+    pad2(d.getSeconds()) +
     "." +
-    String(d.getUTCMilliseconds()).padStart(3, "0")
+    String(d.getMilliseconds()).padStart(3, "0")
   );
 }
 
@@ -476,18 +476,47 @@ export function ProgramRunner() {
   useEffect(() => {
     if (iframeSrcOverride === "about:blank") return;
     let expected = performance.now() + MAIN_THREAD_WATCH_TICK_MS;
-    const id = window.setInterval(() => {
-      if (iframeAlreadySuspendedRef.current) return;
-      const now = performance.now();
-      const drift = now - expected;
-      const tick = MAIN_THREAD_WATCH_TICK_MS;
-      expected += tick * Math.max(1, Math.round(drift / tick));
-      if (drift >= MAIN_THREAD_JANK_THRESHOLD_MS) {
-        suspendProgramIframe(MAIN_THREAD_JANK_MESSAGE);
-        window.clearInterval(id);
+    let intervalId: number | null = null;
+
+    const stopWatch = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
       }
-    }, MAIN_THREAD_WATCH_TICK_MS);
-    return () => window.clearInterval(id);
+    };
+
+    const startWatch = () => {
+      if (intervalId !== null) return;
+      expected = performance.now() + MAIN_THREAD_WATCH_TICK_MS;
+      intervalId = window.setInterval(() => {
+        if (iframeAlreadySuspendedRef.current) return;
+        const now = performance.now();
+        const drift = now - expected;
+        const tick = MAIN_THREAD_WATCH_TICK_MS;
+        expected += tick * Math.max(1, Math.round(drift / tick));
+        if (drift >= MAIN_THREAD_JANK_THRESHOLD_MS) {
+          suspendProgramIframe(MAIN_THREAD_JANK_MESSAGE);
+          stopWatch();
+        }
+      }, MAIN_THREAD_WATCH_TICK_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopWatch();
+        return;
+      }
+      startWatch();
+    };
+
+    if (document.visibilityState !== "hidden") {
+      startWatch();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stopWatch();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [selected?.path, iframeSrcOverride, suspendProgramIframe]);
 
   /**
@@ -534,17 +563,45 @@ export function ProgramRunner() {
       }
     };
 
-    const intervalId = window.setInterval(
-      scheduleProbe,
-      CHILD_EVENT_LOOP_PROBE_INTERVAL_MS
-    );
-    return () => {
-      window.clearInterval(intervalId);
+    let intervalId: number | null = null;
+
+    const stopProbe = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
       if (childProbeTimeoutRef.current !== null) {
         clearTimeout(childProbeTimeoutRef.current);
         childProbeTimeoutRef.current = null;
       }
       childProbeNonceRef.current = null;
+    };
+
+    const startProbe = () => {
+      if (intervalId !== null) return;
+      intervalId = window.setInterval(
+        scheduleProbe,
+        CHILD_EVENT_LOOP_PROBE_INTERVAL_MS
+      );
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopProbe();
+        return;
+      }
+      startProbe();
+      scheduleProbe();
+    };
+
+    if (document.visibilityState !== "hidden") {
+      startProbe();
+      scheduleProbe();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stopProbe();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [selected?.path, iframeSrcOverride, suspendProgramIframe]);
 
