@@ -31,6 +31,12 @@ const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
     path: "/programs/debug-abuse/",
     iframeTitle: "不正行為テスト",
   },
+  {
+    id: "csp-sandbox-lab",
+    label: "CSP / sandbox 制限デモ（/programs/csp-sandbox-lab/）",
+    path: "/programs/csp-sandbox-lab/",
+    iframeTitle: "CSP / sandbox 制限デモ",
+  },
 ];
 
 const childReplyTarget = "*";
