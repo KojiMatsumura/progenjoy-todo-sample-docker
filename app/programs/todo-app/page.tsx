@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./assets/todo-app.module.css";
+import dependencies from "./assets/dependencies.json";
+import { loadLibrariesFromManifest } from "@/lib/programDependencyLoader";
 import { useTodoBridge } from "./lib/useTodoBridge";
 import {
   buildContentForSave,
@@ -13,12 +15,26 @@ import {
 } from "./lib/todoModel";
 
 export default function TodoListPage() {
+  type LuxonDateTime = {
+    now: () => { startOf: (unit: string) => any };
+    fromISO: (
+      iso: string,
+      opts?: { zone?: string }
+    ) => {
+      isValid: boolean;
+      toLocaleString: (fmt: unknown) => string;
+      startOf: (unit: string) => any;
+      diff: (other: any, unit: string) => { days: number };
+    };
+    DATE_SHORT: unknown;
+  };
   const { requestRead, requestSave, hasParent } = useTodoBridge();
   const [items, setItems] = useState<TodoItem[]>([]);
   const [lastContent, setLastContent] = useState<Record<string, unknown>>({});
   const lastContentRef = useRef<Record<string, unknown>>({});
   const [status, setStatus] = useState("");
   const [statusError, setStatusError] = useState(false);
+  const [DateTime, setDateTime] = useState<LuxonDateTime | null>(null);
 
   useEffect(() => {
     lastContentRef.current = lastContent;
@@ -28,6 +44,35 @@ export default function TodoListPage() {
     setStatus(msg);
     setStatusError(!!isError);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadLibrariesFromManifest(dependencies);
+        const dt = (window as unknown as { luxon?: { DateTime?: LuxonDateTime } })
+          .luxon?.DateTime;
+        if (!dt) {
+          throw new Error(
+            "luxon の初期化に失敗しました（dependencies.json の定義と CDN 配信物を確認してください）"
+          );
+        }
+        if (!cancelled) {
+          setDateTime(() => dt);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setStatusLine(
+            e instanceof Error ? e.message : String(e),
+            true
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setStatusLine]);
 
   const persist = useCallback(
     async (nextItems: TodoItem[]) => {
@@ -164,7 +209,7 @@ export default function TodoListPage() {
   );
 
   const onAdd = useCallback(
-    (title: string) => {
+    (title: string, dueAt: string) => {
       const t = title.trim();
       if (!t) {
         setStatusLine("タイトルを入力してください", true);
@@ -178,6 +223,7 @@ export default function TodoListPage() {
             title: t,
             done: false,
             createdAt: new Date().toISOString(),
+            dueAt: dueAt || undefined,
           },
         ];
         void persist(next);
@@ -188,6 +234,26 @@ export default function TodoListPage() {
   );
 
   const [newTitle, setNewTitle] = useState("");
+  const [newDueAt, setNewDueAt] = useState("");
+
+  const formatDueMeta = useCallback(
+    (dueAt?: string) => {
+      if (!dueAt) return "期限: 未設定";
+      if (!DateTime) return "期限: " + dueAt + "（luxon 読込待ち）";
+      const due = DateTime.fromISO(dueAt, { zone: "local" });
+      if (!due.isValid) return "期限: " + dueAt + "（日付形式エラー）";
+      const today = DateTime.now().startOf("day");
+      const days = Math.ceil(due.startOf("day").diff(today, "days").days);
+      const remain =
+        days > 0
+          ? "残り" + String(days) + "日"
+          : days === 0
+            ? "今日まで"
+            : String(Math.abs(days)) + "日超過";
+      return "期限: " + due.toLocaleString(DateTime.DATE_SHORT) + " ・ " + remain;
+    },
+    [DateTime]
+  );
 
   return (
     <div className={styles.app}>
@@ -206,16 +272,21 @@ export default function TodoListPage() {
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              onAdd(newTitle);
+                  onAdd(newTitle, newDueAt);
               setNewTitle("");
             }
           }}
+        />
+        <input
+          type="date"
+          value={newDueAt}
+          onChange={(e) => setNewDueAt(e.target.value)}
         />
         <button
           type="button"
           className={styles.btnPrimary}
           onClick={() => {
-            onAdd(newTitle);
+            onAdd(newTitle, newDueAt);
             setNewTitle("");
           }}
         >
@@ -271,6 +342,7 @@ export default function TodoListPage() {
                       作成: {formatDateShort(it.createdAt)} ・ ID:{" "}
                       {it.id.slice(0, 8)}…
                     </div>
+                    <div className={styles.meta}>{formatDueMeta(it.dueAt)}</div>
                   </Link>
                 </div>
                 <button

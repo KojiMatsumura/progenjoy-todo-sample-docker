@@ -3,6 +3,7 @@ export type TodoItem = {
   title: string;
   done: boolean;
   createdAt: string;
+  dueAt?: string;
 };
 
 export type ApiPayload = {
@@ -45,11 +46,14 @@ export function normalizeItemsFromRoot(root: Record<string, unknown>): {
       migrationNeeded = true;
       createdAt = new Date().toISOString();
     }
+    const dueAt =
+      typeof it.dueAt === "string" && it.dueAt.length > 0 ? it.dueAt : undefined;
     out.push({
       id,
       title,
       done: !!it.done,
       createdAt,
+      dueAt,
     });
   }
   return { items: out, migrationNeeded };
@@ -69,6 +73,7 @@ export function buildContentForSave(
       title: it.title,
       done: !!it.done,
       createdAt: it.createdAt,
+        dueAt: typeof it.dueAt === "string" && it.dueAt.length > 0 ? it.dueAt : undefined,
     })),
     updatedAt: new Date().toISOString(),
   };

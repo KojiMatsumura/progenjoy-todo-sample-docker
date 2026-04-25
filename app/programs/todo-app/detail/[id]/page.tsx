@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../../assets/todo-app.module.css";
+import dependencies from "../../assets/dependencies.json";
+import { loadLibrariesFromManifest } from "@/lib/programDependencyLoader";
 import { useTodoBridge } from "../../lib/useTodoBridge";
 import {
   buildContentForSave,
@@ -13,6 +15,19 @@ import {
 } from "../../lib/todoModel";
 
 export default function TodoDetailPage() {
+  type LuxonDateTime = {
+    now: () => { startOf: (unit: string) => any };
+    fromISO: (
+      iso: string,
+      opts?: { zone?: string }
+    ) => {
+      isValid: boolean;
+      toLocaleString: (fmt: unknown) => string;
+      startOf: (unit: string) => any;
+      diff: (other: any, unit: string) => { days: number };
+    };
+    DATE_SHORT: unknown;
+  };
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id;
@@ -26,6 +41,7 @@ export default function TodoDetailPage() {
   const [status, setStatus] = useState("");
   const [statusError, setStatusError] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [DateTime, setDateTime] = useState<LuxonDateTime | null>(null);
 
   useEffect(() => {
     lastContentRef.current = lastContent;
@@ -35,6 +51,32 @@ export default function TodoDetailPage() {
     setStatus(msg);
     setStatusError(!!isError);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadLibrariesFromManifest(dependencies);
+        const dt = (window as unknown as { luxon?: { DateTime?: LuxonDateTime } })
+          .luxon?.DateTime;
+        if (!dt) {
+          throw new Error(
+            "luxon の初期化に失敗しました（dependencies.json の定義と CDN 配信物を確認してください）"
+          );
+        }
+        if (!cancelled) {
+          setDateTime(() => dt);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setStatusLine(e instanceof Error ? e.message : String(e), true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setStatusLine]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +191,32 @@ export default function TodoDetailPage() {
     }
   }, [hasParent, id, requestSave, router, setStatusLine]);
 
+  const dueText = useCallback(
+    (dueAt?: string) => {
+      if (!dueAt) return "未設定";
+      if (!DateTime) return dueAt + "（luxon 読込待ち）";
+      const due = DateTime.fromISO(dueAt, { zone: "local" });
+      if (!due.isValid) return dueAt + "（日付形式エラー）";
+      return due.toLocaleString(DateTime.DATE_SHORT);
+    },
+    [DateTime]
+  );
+
+  const remainText = useCallback(
+    (dueAt?: string) => {
+      if (!dueAt) return "—";
+      if (!DateTime) return "luxon 読込待ち";
+      const due = DateTime.fromISO(dueAt, { zone: "local" });
+      if (!due.isValid) return "日付形式エラー";
+      const today = DateTime.now().startOf("day");
+      const days = Math.ceil(due.startOf("day").diff(today, "days").days);
+      if (days > 0) return "残り" + String(days) + "日";
+      if (days === 0) return "今日まで";
+      return String(Math.abs(days)) + "日超過";
+    },
+    [DateTime]
+  );
+
   return (
     <div className={styles.app}>
       <p className={styles.backRow}>
@@ -193,6 +261,10 @@ export default function TodoDetailPage() {
                 完了
               </label>
             </dd>
+            <dt>期限日</dt>
+            <dd>{dueText(item.dueAt)}</dd>
+            <dt>残り日数</dt>
+            <dd>{remainText(item.dueAt)}</dd>
           </dl>
           <div className={styles.detailActions}>
             <button
