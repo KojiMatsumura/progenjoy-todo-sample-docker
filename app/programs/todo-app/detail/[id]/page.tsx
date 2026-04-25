@@ -135,7 +135,7 @@ export default function TodoDetailPage() {
   );
 
   const onDelete = useCallback(async () => {
-    if (!id || !window.confirm("この TODO を削除しますか？")) return;
+    if (!id) return;
     if (!hasParent()) return;
     setStatusLine("保存中…");
     try {

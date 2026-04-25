@@ -92,6 +92,13 @@ type MagicBytesValidationResult = {
   errorMessage: string | null;
 };
 
+type SizeValidationResult = {
+  ok: boolean;
+  totalBytes: number;
+  limitBytes: number;
+  errorMessage: string | null;
+};
+
 const ASSET_ALLOWED_SUFFIXES = [
   ".jpeg",
   ".jpg",
@@ -146,6 +153,9 @@ const NON_ASSETS_ALLOWED_SUFFIXES = [
 const NON_ASSETS_ALLOWED_SUFFIXES_LONGEST_FIRST = [
   ...NON_ASSETS_ALLOWED_SUFFIXES,
 ].sort((a, b) => b.length - a.length);
+
+const PROGRAM_TOTAL_SIZE_LIMIT_BYTES = 100 * 1024 * 1024;
+const ASSETS_TOTAL_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 
 const MAGIC_TARGET_SUFFIXES = [
   ".woff2",
@@ -396,6 +406,60 @@ async function validateMagicBytes(
   };
 }
 
+async function validateTotalProgramSize(root: string): Promise<SizeValidationResult> {
+  const files = await listAllFilesRecursively(root);
+  let totalBytes = 0;
+  for (const abs of files) {
+    const st = await fs.stat(abs);
+    totalBytes += st.size;
+  }
+  return {
+    ok: totalBytes <= PROGRAM_TOTAL_SIZE_LIMIT_BYTES,
+    totalBytes,
+    limitBytes: PROGRAM_TOTAL_SIZE_LIMIT_BYTES,
+    errorMessage:
+      totalBytes <= PROGRAM_TOTAL_SIZE_LIMIT_BYTES
+        ? null
+        : "プログラム全体の合計容量が上限（100MB）を超えています",
+  };
+}
+
+async function validateAssetsTotalSize(root: string): Promise<SizeValidationResult> {
+  const assetsDir = path.join(root, "assets");
+  if (!(await pathExists(assetsDir))) {
+    return {
+      ok: true,
+      totalBytes: 0,
+      limitBytes: ASSETS_TOTAL_SIZE_LIMIT_BYTES,
+      errorMessage: null,
+    };
+  }
+  const st = await fs.stat(assetsDir).catch(() => null);
+  if (!st || !st.isDirectory()) {
+    return {
+      ok: true,
+      totalBytes: 0,
+      limitBytes: ASSETS_TOTAL_SIZE_LIMIT_BYTES,
+      errorMessage: null,
+    };
+  }
+  const files = await listAllFilesRecursively(assetsDir);
+  let totalBytes = 0;
+  for (const abs of files) {
+    const fst = await fs.stat(abs);
+    totalBytes += fst.size;
+  }
+  return {
+    ok: totalBytes <= ASSETS_TOTAL_SIZE_LIMIT_BYTES,
+    totalBytes,
+    limitBytes: ASSETS_TOTAL_SIZE_LIMIT_BYTES,
+    errorMessage:
+      totalBytes <= ASSETS_TOTAL_SIZE_LIMIT_BYTES
+        ? null
+        : "assets/ 配下ファイルの合計容量が上限（10MB）を超えています",
+  };
+}
+
 async function runQualityTool(
   npx: string,
   args: string[],
@@ -505,13 +569,17 @@ export async function POST(req: Request): Promise<Response> {
   const assetsValidation = await validateAssetsSuffixes(root, cwd);
   const nonAssetsValidation = await validateNonAssetsSuffixes(root, cwd);
   const magicBytesValidation = await validateMagicBytes(root, cwd);
+  const totalProgramSizeValidation = await validateTotalProgramSize(root);
+  const assetsTotalSizeValidation = await validateAssetsTotalSize(root);
 
   const ok =
     eslint.ok &&
     prettier.ok &&
     assetsValidation.ok &&
     nonAssetsValidation.ok &&
-    magicBytesValidation.ok;
+    magicBytesValidation.ok &&
+    totalProgramSizeValidation.ok &&
+    assetsTotalSizeValidation.ok;
   const summaryParts: string[] = [];
   summaryParts.push(
     "ESLint=" + (eslint.ok ? "成功" : "失敗（exit " + String(eslint.exitCode) + "）")
@@ -544,6 +612,22 @@ export async function POST(req: Request): Promise<Response> {
           "件） " +
           (magicBytesValidation.errorMessage ?? "")
   );
+  summaryParts.push(
+    totalProgramSizeValidation.ok
+      ? "全体容量=成功"
+      : "全体容量=失敗（" +
+          String(totalProgramSizeValidation.totalBytes) +
+          " bytes / 104857600 bytes） " +
+          (totalProgramSizeValidation.errorMessage ?? "")
+  );
+  summaryParts.push(
+    assetsTotalSizeValidation.ok
+      ? "assets容量=成功"
+      : "assets容量=失敗（" +
+          String(assetsTotalSizeValidation.totalBytes) +
+          " bytes / 10485760 bytes） " +
+          (assetsTotalSizeValidation.errorMessage ?? "")
+  );
 
   return NextResponse.json({
     ok,
@@ -555,5 +639,7 @@ export async function POST(req: Request): Promise<Response> {
     assetsValidation,
     nonAssetsValidation,
     magicBytesValidation,
+    totalProgramSizeValidation,
+    assetsTotalSizeValidation,
   });
 }
