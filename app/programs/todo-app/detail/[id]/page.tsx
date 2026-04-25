@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../../assets/todo-app.module.css";
-import dependencies from "../../assets/dependencies.json";
+import dependencies from "../../assets/dependencies-detail.json";
 import { loadLibrariesFromManifest } from "@/lib/programDependencyLoader";
 import { useTodoBridge } from "../../lib/useTodoBridge";
 import {
@@ -61,7 +61,7 @@ export default function TodoDetailPage() {
           .luxon?.DateTime;
         if (!dt) {
           throw new Error(
-            "luxon の初期化に失敗しました（dependencies.json の定義と CDN 配信物を確認してください）"
+            "luxon の初期化に失敗しました（dependencies-detail.json の定義と CDN 配信物を確認してください）"
           );
         }
         if (!cancelled) {

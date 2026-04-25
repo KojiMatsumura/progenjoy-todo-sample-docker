@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./assets/todo-app.module.css";
-import dependencies from "./assets/dependencies.json";
+import dependencies from "./assets/dependencies-list.json";
 import { loadLibrariesFromManifest } from "@/lib/programDependencyLoader";
 import { useTodoBridge } from "./lib/useTodoBridge";
 import {
@@ -28,6 +28,25 @@ export default function TodoListPage() {
     };
     DATE_SHORT: unknown;
   };
+  type ZodLike = {
+    string: () => {
+      trim: () => {
+        min: (
+          n: number,
+          opts?: { message?: string }
+        ) => {
+          max: (
+            n: number,
+            opts?: { message?: string }
+          ) => { safeParse: (v: unknown) => { success: boolean; error?: { issues?: Array<{ message?: string }> } } };
+        };
+      };
+      regex: (
+        r: RegExp,
+        opts?: { message?: string }
+      ) => { optional: () => { safeParse: (v: unknown) => { success: boolean; error?: { issues?: Array<{ message?: string }> } } } };
+    };
+  };
   const { requestRead, requestSave, hasParent } = useTodoBridge();
   const [items, setItems] = useState<TodoItem[]>([]);
   const [lastContent, setLastContent] = useState<Record<string, unknown>>({});
@@ -35,6 +54,7 @@ export default function TodoListPage() {
   const [status, setStatus] = useState("");
   const [statusError, setStatusError] = useState(false);
   const [DateTime, setDateTime] = useState<LuxonDateTime | null>(null);
+  const [zodLib, setZodLib] = useState<ZodLike | null>(null);
 
   useEffect(() => {
     lastContentRef.current = lastContent;
@@ -54,11 +74,19 @@ export default function TodoListPage() {
           .luxon?.DateTime;
         if (!dt) {
           throw new Error(
-            "luxon の初期化に失敗しました（dependencies.json の定義と CDN 配信物を確認してください）"
+            "luxon の初期化に失敗しました（dependencies-list.json の定義と CDN 配信物を確認してください）"
           );
         }
         if (!cancelled) {
           setDateTime(() => dt);
+          const zodGlobal = (window as unknown as { Zod?: { z?: ZodLike } & ZodLike }).Zod;
+          const zLike = zodGlobal?.z ?? zodGlobal;
+          if (!zLike || typeof zLike.string !== "function") {
+            throw new Error(
+              "zod の初期化に失敗しました（dependencies-list.json の定義と CDN 配信物を確認してください）"
+            );
+          }
+          setZodLib(() => zLike);
         }
       } catch (e) {
         if (!cancelled) {
@@ -210,11 +238,34 @@ export default function TodoListPage() {
 
   const onAdd = useCallback(
     (title: string, dueAt: string) => {
-      const t = title.trim();
-      if (!t) {
-        setStatusLine("タイトルを入力してください", true);
+      if (!zodLib) {
+        setStatusLine("zod 読込中です。少し待ってから再度お試しください", true);
         return;
       }
+      const titleResult = zodLib
+        .string()
+        .trim()
+        .min(1, { message: "タイトルを入力してください" })
+        .max(120, { message: "タイトルは120文字以内で入力してください" })
+        .safeParse(title);
+      if (!titleResult.success) {
+        const msg = titleResult.error?.issues?.[0]?.message ?? "タイトルが不正です";
+        setStatusLine(msg, true);
+        return;
+      }
+      const dueResult = zodLib
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, {
+          message: "期限日は YYYY-MM-DD 形式で入力してください",
+        })
+        .optional()
+        .safeParse(dueAt === "" ? undefined : dueAt);
+      if (!dueResult.success) {
+        const msg = dueResult.error?.issues?.[0]?.message ?? "期限日の形式が不正です";
+        setStatusLine(msg, true);
+        return;
+      }
+      const t = titleResult.success ? title.trim() : "";
       setItems((prev) => {
         const next = [
           ...prev,
@@ -230,7 +281,7 @@ export default function TodoListPage() {
         return next;
       });
     },
-    [persist, setStatusLine]
+    [persist, setStatusLine, zodLib]
   );
 
   const [newTitle, setNewTitle] = useState("");

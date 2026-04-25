@@ -1,0 +1,5 @@
+{
+  "updatedAt": "2026-04-25T17:24:07+09:00",
+  "allowedPackages": ["luxon", "react", "@types/node", "zod"],
+  "rejectedPackages": ["date-fns"]
+}

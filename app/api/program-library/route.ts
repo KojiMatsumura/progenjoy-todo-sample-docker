@@ -2,16 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 
-const SEGMENT_SAFE = /^[a-zA-Z0-9._-]+$/;
-
-function resolveBundlePath(libraryName: string): string {
-  if (libraryName === "zod") return "lib/index.umd.js";
-  return "build/global/" + libraryName + ".min.js";
-}
-
-function badRequest(error: string): Response {
-  return NextResponse.json({ error }, { status: 400 });
-}
+const PACKAGE_NAME_SAFE = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i;
+const VERSION_SAFE = /^[a-zA-Z0-9._+-]+$/;
 
 type ProgramLibraryPolicy = {
   updatedAt?: string;
@@ -19,20 +11,27 @@ type ProgramLibraryPolicy = {
   rejectedPackages?: string[];
 };
 
+function resolveBundlePath(libraryName: string): string {
+  if (libraryName === "zod") return "lib/index.umd.js";
+  return "build/global/" + libraryName + ".min.js";
+}
+
 async function readPolicy(): Promise<ProgramLibraryPolicy> {
   const policyPath = path.join(process.cwd(), "config", "program-library-policy.json");
   const raw = await fs.readFile(policyPath, "utf8");
-  const parsed = JSON.parse(raw) as ProgramLibraryPolicy;
-  return parsed;
+  return JSON.parse(raw) as ProgramLibraryPolicy;
 }
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ libraryName: string; version: string }> }
-): Promise<Response> {
-  const { libraryName, version } = await ctx.params;
-  if (!SEGMENT_SAFE.test(libraryName)) return badRequest("invalid_library_name");
-  if (!SEGMENT_SAFE.test(version)) return badRequest("invalid_version");
+export async function GET(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const libraryName = (url.searchParams.get("name") ?? "").trim();
+  const version = (url.searchParams.get("version") ?? "").trim();
+  if (!PACKAGE_NAME_SAFE.test(libraryName)) {
+    return NextResponse.json({ error: "invalid_library_name" }, { status: 400 });
+  }
+  if (!VERSION_SAFE.test(version)) {
+    return NextResponse.json({ error: "invalid_version" }, { status: 400 });
+  }
 
   let policy: ProgramLibraryPolicy;
   try {
@@ -62,9 +61,7 @@ export async function GET(
     libraryName,
     version
   );
-  const fileName = libraryName + ".bundle.js";
-  const cacheFile = path.join(cacheDir, fileName);
-
+  const cacheFile = path.join(cacheDir, libraryName.replace("/", "__") + ".bundle.js");
   try {
     const cached = await fs.readFile(cacheFile);
     return new Response(cached, {
@@ -75,7 +72,7 @@ export async function GET(
       },
     });
   } catch {
-    // miss
+    // cache miss
   }
 
   const cdnUrl =
@@ -84,8 +81,7 @@ export async function GET(
     "@" +
     encodeURIComponent(version) +
     "/" +
-    resolveBundlePath(encodeURIComponent(libraryName));
-
+    resolveBundlePath(libraryName);
   let res: Response;
   try {
     res = await fetch(cdnUrl, { method: "GET", cache: "no-store" });
@@ -105,7 +101,6 @@ export async function GET(
   const body = Buffer.from(await res.arrayBuffer());
   await fs.mkdir(cacheDir, { recursive: true });
   await fs.writeFile(cacheFile, body);
-
   return new Response(body, {
     status: 200,
     headers: {

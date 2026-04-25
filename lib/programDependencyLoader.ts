@@ -34,9 +34,9 @@ async function loadLibraryGlobal(
   version: string
 ): Promise<void> {
   const src =
-    "/api/program-library/" +
+    "/api/program-library?name=" +
     encodeURIComponent(libraryName) +
-    "/" +
+    "&version=" +
     encodeURIComponent(version);
   await loadScriptOnce(src);
 }
