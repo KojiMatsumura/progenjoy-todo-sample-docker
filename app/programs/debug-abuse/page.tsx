@@ -76,11 +76,6 @@ export default function DebugAbusePage() {
       },
       "*"
     );
-    setBigLog(
-      "送信: kind=oversized, 文字列長約 " +
-        OVERSIZED_APPROX_BYTES +
-        " バイト（UTF-16 環境ではメモリ上はそれ以上になる場合あり）"
-    );
   }, []);
 
   const cancelInfiniteLoopArm = useCallback(() => {

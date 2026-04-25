@@ -64,6 +64,35 @@ const POST_MESSAGE_FLOOD_WARNING =
   String(CHILD_POST_MESSAGE_RATE_THRESHOLD) +
   " 回以上の postMessage を受信しました。過剰な通信の可能性があります。";
 
+/** 子からの 1 件の postMessage 推定サイズがこれ以上なら警告（UTF-8 換算の近似） */
+const CHILD_POST_MESSAGE_SIZE_THRESHOLD_BYTES = 64 * 1024;
+
+const postMessageSizeEncoder = new TextEncoder();
+
+/**
+ * `postMessage` で渡された `data` のおおよそのバイト数（構造化クローン厳密一致ではない）。
+ * JSON 化できないオブジェクトは 0 として扱い、過大評価による誤警告を避ける。
+ */
+function estimatePostMessagePayloadBytes(data: unknown): number {
+  if (data == null) return 0;
+  if (typeof data === "string") {
+    return postMessageSizeEncoder.encode(data).length;
+  }
+  if (typeof data === "number" || typeof data === "boolean") return 8;
+  if (typeof data === "bigint") return 32;
+  if (data instanceof ArrayBuffer) return data.byteLength;
+  if (ArrayBuffer.isView(data)) return data.byteLength;
+  if (data instanceof Blob) return data.size;
+  if (typeof data === "object") {
+    try {
+      return postMessageSizeEncoder.encode(JSON.stringify(data)).length;
+    } catch {
+      return 0;
+    }
+  }
+  return postMessageSizeEncoder.encode(String(data)).length;
+}
+
 function safeDecodePathnameSegment(pathname: string): string {
   try {
     return decodeURIComponent(pathname);
@@ -291,6 +320,10 @@ export function ProgramRunner() {
   >(null);
   const [showPostMessageFloodWarning, setShowPostMessageFloodWarning] =
     useState(false);
+  /** 非 null のとき大きすぎる postMessage 警告を表示。値は推定バイト数 */
+  const [postMessageOversizeBytes, setPostMessageOversizeBytes] = useState<
+    number | null
+  >(null);
   /** 応答不能検知後に iframe を `about:blank` に固定（React の src と整合させる） */
   const [iframeSrcOverride, setIframeSrcOverride] = useState<string | null>(
     null
@@ -409,6 +442,7 @@ export function ProgramRunner() {
     setIframeSrcOverride(null);
     setIframeSuspendedMessage(null);
     setShowPostMessageFloodWarning(false);
+    setPostMessageOversizeBytes(null);
     childPostMessageTimestampsRef.current = [];
   }, [selected?.path]);
 
@@ -421,6 +455,9 @@ export function ProgramRunner() {
     }
     childProbeNonceRef.current = null;
     setDirectoryEscapeAbsoluteUrl(null);
+    setShowPostMessageFloodWarning(false);
+    setPostMessageOversizeBytes(null);
+    childPostMessageTimestampsRef.current = [];
     setIframeSrcOverride("about:blank");
     setIframeSuspendedMessage(reason);
   }, []);
@@ -609,6 +646,7 @@ export function ProgramRunner() {
       setIframeSuspendedMessage(null);
       setDirectoryEscapeAbsoluteUrl(null);
       setShowPostMessageFloodWarning(false);
+      setPostMessageOversizeBytes(null);
       childPostMessageTimestampsRef.current = [];
     },
     [programs, clearLog, setProgramQueryInUrl]
@@ -670,6 +708,11 @@ export function ProgramRunner() {
       if (drop > 0) ts.splice(0, drop);
       if (ts.length >= CHILD_POST_MESSAGE_RATE_THRESHOLD) {
         setShowPostMessageFloodWarning(true);
+      }
+
+      const payloadBytes = estimatePostMessagePayloadBytes(ev.data);
+      if (payloadBytes >= CHILD_POST_MESSAGE_SIZE_THRESHOLD_BYTES) {
+        setPostMessageOversizeBytes(payloadBytes);
       }
 
       appendLog("in", "postMessage received", ev.data);
@@ -1024,6 +1067,38 @@ export function ProgramRunner() {
                         type="button"
                         className="directoryEscapeOverlayDismiss"
                         onClick={() => setShowPostMessageFloodWarning(false)}
+                      >
+                        閉じる
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {postMessageOversizeBytes != null && (
+                  <div
+                    className="directoryEscapeOverlay postMessageSizeOverlay"
+                    role="alert"
+                  >
+                    <div className="directoryEscapeOverlayInner">
+                      <p className="directoryEscapeOverlayText">
+                        許容を超える大きさの postMessage
+                        を受信しました（推定{" "}
+                        {CHILD_POST_MESSAGE_SIZE_THRESHOLD_BYTES /
+                          1024}{" "}
+                        KiB 以上）。
+                      </p>
+                      <p className="directoryEscapeOverlayPathLabel">
+                        推定ペイロードサイズ
+                      </p>
+                      <p className="directoryEscapeOverlayPathValue">
+                        {postMessageOversizeBytes.toLocaleString("ja-JP")}{" "}
+                        バイト（約{" "}
+                        {(postMessageOversizeBytes / 1024).toFixed(1)}{" "}
+                        KiB）
+                      </p>
+                      <button
+                        type="button"
+                        className="directoryEscapeOverlayDismiss"
+                        onClick={() => setPostMessageOversizeBytes(null)}
                       >
                         閉じる
                       </button>
