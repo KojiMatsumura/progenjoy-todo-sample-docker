@@ -344,6 +344,10 @@ export function ProgramRunner() {
   const privacyReplayQueueRef = useRef<PrivacyReplayItem[]>([]);
   const prevPrivacyModeRef = useRef<boolean | null>(null);
   const privacyModeRef = useRef(false);
+  const [qualityBusy, setQualityBusy] = useState(false);
+  const [qualityFailed, setQualityFailed] = useState(false);
+  /** 並走する品質チェックのうち最新以外は結果を無視する */
+  const qualityRequestIdRef = useRef(0);
 
   const clearLog = useCallback(() => {
     const logList = logListRef.current;
@@ -657,6 +661,88 @@ export function ProgramRunner() {
     },
     [programs, clearLog, setProgramQueryInUrl]
   );
+
+  const executeProgramQualityCheck = useCallback(
+    async (programId: string, trigger: "manual" | "auto") => {
+      const requestId = ++qualityRequestIdRef.current;
+      setQualityBusy(true);
+      setQualityFailed(false);
+      try {
+        const res = await fetch("/api/program-quality", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ programId }),
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          summary?: string;
+          sourcePath?: string;
+          eslint?: { ok?: boolean; exitCode?: number };
+          prettier?: { ok?: boolean; exitCode?: number };
+        };
+        if (requestId !== qualityRequestIdRef.current) return;
+
+        const prefix = trigger === "auto" ? "[自動] " : "";
+
+        if (!res.ok) {
+          setQualityFailed(true);
+          appendLog(
+            "out",
+            prefix +
+              "program-quality: HTTP " +
+              res.status +
+              " " +
+              (j.error ?? ""),
+            j
+          );
+          return;
+        }
+        const summaryLine =
+          prefix +
+          "program-quality program=" +
+          programId +
+          " path=" +
+          (j.sourcePath ?? "?") +
+          " → " +
+          (j.summary ?? "（要約なし）");
+        setQualityFailed(j.ok !== true);
+        appendLog("out", summaryLine, j);
+      } catch (err) {
+        if (requestId !== qualityRequestIdRef.current) return;
+        setQualityFailed(true);
+        appendLog(
+          "out",
+          (trigger === "auto" ? "[自動] " : "") +
+            "program-quality network_error",
+          String(err)
+        );
+      } finally {
+        if (requestId === qualityRequestIdRef.current) {
+          setQualityBusy(false);
+        }
+      }
+    },
+    [appendLog]
+  );
+
+  const runProgramQuality = useCallback(() => {
+    const programId = selectedProgramIdRef.current;
+    if (!programId) {
+      appendLog("out", "program-quality: program 未選択", null);
+      return;
+    }
+    void executeProgramQualityCheck(programId, "manual");
+  }, [appendLog, executeProgramQualityCheck]);
+
+  useEffect(() => {
+    const programId = selected?.id ?? null;
+    if (!programId) return;
+    if (iframeSrcOverride !== null) return;
+
+    void executeProgramQualityCheck(programId, "auto");
+  }, [selected?.id, iframeSrcOverride, executeProgramQualityCheck]);
 
   const onIframeLoad = useCallback(() => {
     if (iframeAlreadySuspendedRef.current) return;
@@ -972,6 +1058,25 @@ export function ProgramRunner() {
               スマホ
             </span>
           </div>
+        </div>
+        <div className="programBarQuality">
+          <span className="programBarQualityLabel">ソース品質</span>
+          <button
+            type="button"
+            className="programQualityBtn"
+            disabled={!selected || qualityBusy || iframeSrcOverride !== null}
+            onClick={() => void runProgramQuality()}
+          >
+            バリデーション
+          </button>
+          {qualityFailed && (
+            <span className="programQualityWarn" role="alert">
+              バリデーションに失敗しているため、このままではアップロードできません。詳細は通信ログを確認してください。
+            </span>
+          )}
+          <p className="programBarQualityHint">
+            表示中のプログラムに対し、複数のバリデーションを続けて実行します。結果は通信ログに表示されます。
+          </p>
         </div>
       </div>
 

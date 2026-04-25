@@ -330,6 +330,66 @@ a:hover {
   flex: 0 0 auto;
 }
 
+.programBarQuality {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  flex: 1 1 100%;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgb(229 231 235 / 0.9);
+}
+
+.programBarQualityLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.programQualityBtn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 0.4rem;
+  border: 1px solid var(--gray-300);
+  background: #fff;
+  color: var(--gray-800);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.programQualityBtn:hover:not(:disabled) {
+  background: var(--gray-100);
+  border-color: var(--gray-400);
+}
+
+.programQualityBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.programQualityWarn {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b42318;
+}
+
+.programBarQualityHint {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--gray-500);
+}
+
+.programBarInlineCode {
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
 .programBar label {
   font-size: 0.875rem;
   font-weight: 600;
