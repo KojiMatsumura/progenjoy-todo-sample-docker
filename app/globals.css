@@ -698,6 +698,16 @@ a:hover {
   border-bottom-color: rgb(232 93 4 / 0.25);
 }
 
+.mainThreadJankBanner {
+  border-bottom-color: rgb(252 165 165 / 0.85);
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.mainThreadJankBanner .privacyBlockedDismiss {
+  color: #991b1b;
+}
+
 .privacyBlockedBanner p {
   margin: 0;
   min-width: 0;

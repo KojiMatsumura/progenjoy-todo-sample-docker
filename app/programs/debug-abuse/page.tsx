@@ -12,6 +12,9 @@ export default function DebugAbusePage() {
   const [spamCount, setSpamCount] = useState(200);
   const [spamLog, setSpamLog] = useState("");
   const [bigLog, setBigLog] = useState("");
+  const [loopLog, setLoopLog] = useState("");
+  /** sandbox 既定では `confirm` が使えないため、同じボタンを二度押す二段階にする */
+  const [infiniteLoopArmed, setInfiniteLoopArmed] = useState(false);
 
   const redirectRoot = useCallback(() => {
     window.location.assign("/");
@@ -79,6 +82,27 @@ export default function DebugAbusePage() {
         " バイト（UTF-16 環境ではメモリ上はそれ以上になる場合あり）"
     );
   }, []);
+
+  const cancelInfiniteLoopArm = useCallback(() => {
+    setInfiniteLoopArmed(false);
+    setLoopLog("");
+  }, []);
+
+  const runInfiniteLoop = useCallback(() => {
+    if (!infiniteLoopArmed) {
+      setInfiniteLoopArmed(true);
+      setLoopLog(
+        "確認: もう一度「無限ループを実行」を押すと、この iframe 内で for (;;) による無限ループが走ります（画面はフリーズします）。取り消す場合は下の「取り消し」を押してください。"
+      );
+      return;
+    }
+    setLoopLog("無限ループを開始します…（直後にこの画面はフリーズします）");
+    window.setTimeout(() => {
+      for (;;) {
+        /* 検証用: メインスレッド占有 */
+      }
+    }, 100);
+  }, [infiniteLoopArmed]);
 
   return (
     <div className={styles.app}>
@@ -165,6 +189,38 @@ export default function DebugAbusePage() {
         </button>
         <p className={styles.log} aria-live="polite">
           {bigLog}
+        </p>
+      </section>
+
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>無限ループ</h2>
+        <p className={styles.desc}>
+          メインスレッドを占有する{" "}
+          <code className={styles.inlineCode}>for (;;)</code>{" "}
+          を実行します（CPU を忙しくし、iframe 内の操作ができなくなります）。iframe
+          の sandbox では <code className={styles.inlineCode}>confirm</code>{" "}
+          が使えないため、同じボタンを 2 回押して確定します。
+        </p>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnDanger}`}
+          onClick={runInfiniteLoop}
+        >
+          {infiniteLoopArmed
+            ? "無限ループを実行（確定）"
+            : "無限ループを実行"}
+        </button>
+        {infiniteLoopArmed && (
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={cancelInfiniteLoopArm}
+          >
+            取り消し
+          </button>
+        )}
+        <p className={styles.log} aria-live="polite">
+          {loopLog}
         </p>
       </section>
     </div>

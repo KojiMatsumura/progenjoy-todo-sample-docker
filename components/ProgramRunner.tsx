@@ -39,6 +39,22 @@ const maxEntries = 200;
 const DIRECTORY_ESCAPE_WARNING =
   "不正なパスにリダイレクトしています。作成したプログラムの範囲外へのリダイレクトは許可されていません。";
 
+/** 監視ページ（親）のイベントループが目安としてこれ以上遅れたら重いとみなす */
+const MAIN_THREAD_WATCH_TICK_MS = 200;
+const MAIN_THREAD_JANK_THRESHOLD_MS = 3000;
+
+/** 子フレームに postMessage ハートビートは送らず、子の `setTimeout(0)` が実行されるかだけ見る */
+const CHILD_EVENT_LOOP_PROBE_INTERVAL_MS = 1500;
+const CHILD_EVENT_LOOP_PROBE_TIMEOUT_MS = 3000;
+
+const JANK_PONG_TYPE = "__runner_jank_pong" as const;
+
+const MAIN_THREAD_JANK_MESSAGE =
+  "監視ページのメインスレッドが3秒以上まともに動いていません。ブラウザ全体やこのタブが非常に重い可能性があります。プログラムの表示（iframe）を停止しました。";
+
+const CHILD_THREAD_JANK_MESSAGE =
+  "プログラム（iframe）のメインスレッドが3秒以上応答しませんでした。無限ループなどで重くなっている可能性があるため、表示（iframe）を停止しました。";
+
 function safeDecodePathnameSegment(pathname: string): string {
   try {
     return decodeURIComponent(pathname);
@@ -260,6 +276,19 @@ export function ProgramRunner() {
   /** 非 null のときディレクトリ警告を表示。値は不正な遷移先の絶対パス（`location.href`）または取得不可の説明 */
   const [directoryEscapeAbsoluteUrl, setDirectoryEscapeAbsoluteUrl] =
     useState<string | null>(null);
+  /** iframe を止めたときの説明（監視ページのみで検知したメインスレッド重さ） */
+  const [iframeSuspendedMessage, setIframeSuspendedMessage] = useState<
+    string | null
+  >(null);
+  /** 応答不能検知後に iframe を `about:blank` に固定（React の src と整合させる） */
+  const [iframeSrcOverride, setIframeSrcOverride] = useState<string | null>(
+    null
+  );
+  const iframeAlreadySuspendedRef = useRef(false);
+  /** 子のイベントループ応答待ち（postMessage ではなく子側 setTimeout(0) の実行結果で判定） */
+  const childProbeNonceRef = useRef<string | null>(null);
+  /** ブラウザのタイマー ID（Node の `Timeout` 型と衝突しないよう number） */
+  const childProbeTimeoutRef = useRef<number | null>(null);
   const privacyReplayQueueRef = useRef<PrivacyReplayItem[]>([]);
   const prevPrivacyModeRef = useRef<boolean | null>(null);
   const privacyModeRef = useRef(false);
@@ -363,7 +392,99 @@ export function ProgramRunner() {
 
   useEffect(() => {
     setDirectoryEscapeAbsoluteUrl(null);
+    iframeAlreadySuspendedRef.current = false;
+    setIframeSrcOverride(null);
+    setIframeSuspendedMessage(null);
   }, [selected?.path]);
+
+  const suspendProgramIframe = useCallback((reason: string) => {
+    if (iframeAlreadySuspendedRef.current) return;
+    iframeAlreadySuspendedRef.current = true;
+    if (childProbeTimeoutRef.current !== null) {
+      clearTimeout(childProbeTimeoutRef.current);
+      childProbeTimeoutRef.current = null;
+    }
+    childProbeNonceRef.current = null;
+    setDirectoryEscapeAbsoluteUrl(null);
+    setIframeSrcOverride("about:blank");
+    setIframeSuspendedMessage(reason);
+  }, []);
+
+  /** 監視ページ（親）のイベントループ遅延検知 — 子へのハートビート postMessage は使わない */
+  useEffect(() => {
+    if (iframeSrcOverride === "about:blank") return;
+    let expected = performance.now() + MAIN_THREAD_WATCH_TICK_MS;
+    const id = window.setInterval(() => {
+      if (iframeAlreadySuspendedRef.current) return;
+      const now = performance.now();
+      const drift = now - expected;
+      const tick = MAIN_THREAD_WATCH_TICK_MS;
+      expected += tick * Math.max(1, Math.round(drift / tick));
+      if (drift >= MAIN_THREAD_JANK_THRESHOLD_MS) {
+        suspendProgramIframe(MAIN_THREAD_JANK_MESSAGE);
+        window.clearInterval(id);
+      }
+    }, MAIN_THREAD_WATCH_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [selected?.path, iframeSrcOverride, suspendProgramIframe]);
+
+  /**
+   * 子フレームのキューに `setTimeout(0)` を積むだけ（子プログラムのコード変更や postMessage ハートビート不要）。
+   * 無限ループで子のメインスレッドが詰まるとコールバックが走らず、親がタイムアウトで検知する。
+   */
+  useEffect(() => {
+    if (iframeSrcOverride === "about:blank") return;
+
+    const scheduleProbe = () => {
+      if (iframeAlreadySuspendedRef.current) return;
+      const iframe = iframeRef.current;
+      const cw = iframe?.contentWindow;
+      if (!cw || childProbeNonceRef.current !== null) return;
+
+      const nonce = crypto.randomUUID();
+      childProbeNonceRef.current = nonce;
+      const tid = window.setTimeout(() => {
+        childProbeTimeoutRef.current = null;
+        if (childProbeNonceRef.current === nonce) {
+          childProbeNonceRef.current = null;
+          suspendProgramIframe(CHILD_THREAD_JANK_MESSAGE);
+        }
+      }, CHILD_EVENT_LOOP_PROBE_TIMEOUT_MS);
+      childProbeTimeoutRef.current = tid as unknown as number;
+
+      try {
+        // 子のレルムで実行されるコード文字列（CSP で禁止される環境では検知を諦める）
+        // eslint-disable-next-line no-implied-eval -- 子 iframe のイベントループ生存確認専用
+        cw.setTimeout(
+          "window.parent.postMessage({type:\"" +
+            JANK_PONG_TYPE +
+            "\",nonce:\"" +
+            nonce +
+            "\"},\"*\");",
+          0
+        );
+      } catch {
+        if (childProbeTimeoutRef.current !== null) {
+          clearTimeout(childProbeTimeoutRef.current);
+          childProbeTimeoutRef.current = null;
+        }
+        childProbeNonceRef.current = null;
+      }
+    };
+
+    const intervalId = window.setInterval(
+      scheduleProbe,
+      CHILD_EVENT_LOOP_PROBE_INTERVAL_MS
+    );
+    return () => {
+      window.clearInterval(intervalId);
+      if (childProbeTimeoutRef.current !== null) {
+        clearTimeout(childProbeTimeoutRef.current);
+        childProbeTimeoutRef.current = null;
+      }
+      childProbeNonceRef.current = null;
+    };
+  }, [selected?.path, iframeSrcOverride, suspendProgramIframe]);
 
   useEffect(() => {
     privacyModeRef.current = privacyMode;
@@ -468,15 +589,22 @@ export function ProgramRunner() {
       setSelected(next);
       setProgramQueryInUrl(next.id);
       clearLog();
+      iframeAlreadySuspendedRef.current = false;
+      setIframeSrcOverride(null);
+      setIframeSuspendedMessage(null);
+      setDirectoryEscapeAbsoluteUrl(null);
     },
     [programs, clearLog, setProgramQueryInUrl]
   );
 
   const onIframeLoad = useCallback(() => {
+    if (iframeAlreadySuspendedRef.current) return;
     const iframe = iframeRef.current;
     const programPath = selectedProgramPathRef.current;
     if (!iframe || !programPath) return;
     try {
+      const href = iframe.contentWindow?.location.href ?? "";
+      if (href === "about:blank" || href.startsWith("about:")) return;
       const cw = iframe.contentWindow;
       if (!cw) return;
       const pathname = cw.location.pathname;
@@ -496,6 +624,26 @@ export function ProgramRunner() {
     const onMessage = (ev: MessageEvent) => {
       const cw = iframeRef.current?.contentWindow;
       if (ev.source !== cw) return;
+
+      if (
+        typeof ev.data === "object" &&
+        ev.data !== null &&
+        (ev.data as { type?: string }).type === JANK_PONG_TYPE
+      ) {
+        const nonce = (ev.data as { nonce?: unknown }).nonce;
+        if (
+          typeof nonce === "string" &&
+          nonce === childProbeNonceRef.current
+        ) {
+          childProbeNonceRef.current = null;
+          if (childProbeTimeoutRef.current !== null) {
+            clearTimeout(childProbeTimeoutRef.current);
+            childProbeTimeoutRef.current = null;
+          }
+        }
+        return;
+      }
+
       appendLog("in", "postMessage received", ev.data);
 
       if (isApi042(ev.data)) {
@@ -666,6 +814,11 @@ export function ProgramRunner() {
         ? "プログラムテスト: " + selected.label
         : "プログラムテスト";
 
+  const iframeSrc =
+    iframeSrcOverride !== null
+      ? iframeSrcOverride
+      : (selected?.path ?? "/programs/todo-app/");
+
   return (
     <main className="main">
       <h1 className="pageTitle">{pageHeading}</h1>
@@ -769,6 +922,21 @@ export function ProgramRunner() {
             </button>
           </div>
         )}
+        {iframeSuspendedMessage != null && (
+          <div
+            className="privacyBlockedBanner mainThreadJankBanner"
+            role="alert"
+          >
+            <p>{iframeSuspendedMessage}</p>
+            <button
+              type="button"
+              className="privacyBlockedDismiss"
+              onClick={() => setIframeSuspendedMessage(null)}
+            >
+              閉じる
+            </button>
+          </div>
+        )}
         <div className="privacyRunnerInner">
           <div className="grid">
             <div
@@ -787,7 +955,7 @@ export function ProgramRunner() {
                 <div className="viewportInner">
                   <iframe
                     ref={iframeRef}
-                    src={selected?.path ?? "/programs/todo-app/"}
+                    src={iframeSrc}
                     title={selected?.iframeTitle ?? "program"}
                     sandbox="allow-scripts allow-same-origin"
                     onLoad={onIframeLoad}
