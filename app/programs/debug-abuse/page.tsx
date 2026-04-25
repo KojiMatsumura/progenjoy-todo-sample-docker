@@ -150,7 +150,7 @@ export default function DebugAbusePage() {
         <h2 className={styles.panelTitle}>postMessage 連打</h2>
         <p className={styles.desc}>
           短時間に多数の <code className={styles.inlineCode}>postMessage</code>{" "}
-          を親へ送ります（既定 200 回）。
+          を送ります。
         </p>
         <label className={styles.inline}>
           回数
@@ -178,7 +178,7 @@ export default function DebugAbusePage() {
         <h2 className={styles.panelTitle}>大きすぎる postMessage</h2>
         <p className={styles.desc}>
           約 100KB の文字列を含むオブジェクトを 1
-          回送信します（親のログ・処理負荷確認用）。
+          回送信します。
         </p>
         <button
           type="button"
@@ -195,11 +195,8 @@ export default function DebugAbusePage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>無限ループ</h2>
         <p className={styles.desc}>
-          メインスレッドを占有する{" "}
-          <code className={styles.inlineCode}>for (;;)</code>{" "}
-          を実行します（CPU を忙しくし、iframe 内の操作ができなくなります）。iframe
-          の sandbox では <code className={styles.inlineCode}>confirm</code>{" "}
-          が使えないため、同じボタンを 2 回押して確定します。
+          サイトを重くする無限ループ
+          を実行します。2 回押して確定します。
         </p>
         <button
           type="button"

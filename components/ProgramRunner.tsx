@@ -55,6 +55,15 @@ const MAIN_THREAD_JANK_MESSAGE =
 const CHILD_THREAD_JANK_MESSAGE =
   "プログラム（iframe）のメインスレッドが3秒以上応答しませんでした。無限ループなどで重くなっている可能性があるため、表示（iframe）を停止しました。";
 
+/** 子 iframe からの postMessage がこの回数以上 / この時間窓なら負荷警告 */
+const CHILD_POST_MESSAGE_RATE_WINDOW_MS = 1000;
+const CHILD_POST_MESSAGE_RATE_THRESHOLD = 20;
+
+const POST_MESSAGE_FLOOD_WARNING =
+  "1 秒間に " +
+  String(CHILD_POST_MESSAGE_RATE_THRESHOLD) +
+  " 回以上の postMessage を受信しました。過剰な通信の可能性があります。";
+
 function safeDecodePathnameSegment(pathname: string): string {
   try {
     return decodeURIComponent(pathname);
@@ -280,6 +289,8 @@ export function ProgramRunner() {
   const [iframeSuspendedMessage, setIframeSuspendedMessage] = useState<
     string | null
   >(null);
+  const [showPostMessageFloodWarning, setShowPostMessageFloodWarning] =
+    useState(false);
   /** 応答不能検知後に iframe を `about:blank` に固定（React の src と整合させる） */
   const [iframeSrcOverride, setIframeSrcOverride] = useState<string | null>(
     null
@@ -289,6 +300,8 @@ export function ProgramRunner() {
   const childProbeNonceRef = useRef<string | null>(null);
   /** ブラウザのタイマー ID（Node の `Timeout` 型と衝突しないよう number） */
   const childProbeTimeoutRef = useRef<number | null>(null);
+  /** 子からの postMessage 受信時刻（内部プローブ除く・レート検知用） */
+  const childPostMessageTimestampsRef = useRef<number[]>([]);
   const privacyReplayQueueRef = useRef<PrivacyReplayItem[]>([]);
   const prevPrivacyModeRef = useRef<boolean | null>(null);
   const privacyModeRef = useRef(false);
@@ -395,6 +408,8 @@ export function ProgramRunner() {
     iframeAlreadySuspendedRef.current = false;
     setIframeSrcOverride(null);
     setIframeSuspendedMessage(null);
+    setShowPostMessageFloodWarning(false);
+    childPostMessageTimestampsRef.current = [];
   }, [selected?.path]);
 
   const suspendProgramIframe = useCallback((reason: string) => {
@@ -593,6 +608,8 @@ export function ProgramRunner() {
       setIframeSrcOverride(null);
       setIframeSuspendedMessage(null);
       setDirectoryEscapeAbsoluteUrl(null);
+      setShowPostMessageFloodWarning(false);
+      childPostMessageTimestampsRef.current = [];
     },
     [programs, clearLog, setProgramQueryInUrl]
   );
@@ -642,6 +659,17 @@ export function ProgramRunner() {
           }
         }
         return;
+      }
+
+      const now = performance.now();
+      const ts = childPostMessageTimestampsRef.current;
+      ts.push(now);
+      const cutoff = now - CHILD_POST_MESSAGE_RATE_WINDOW_MS;
+      let drop = 0;
+      while (drop < ts.length && ts[drop]! < cutoff) drop++;
+      if (drop > 0) ts.splice(0, drop);
+      if (ts.length >= CHILD_POST_MESSAGE_RATE_THRESHOLD) {
+        setShowPostMessageFloodWarning(true);
       }
 
       appendLog("in", "postMessage received", ev.data);
@@ -977,6 +1005,25 @@ export function ProgramRunner() {
                         type="button"
                         className="directoryEscapeOverlayDismiss"
                         onClick={() => setDirectoryEscapeAbsoluteUrl(null)}
+                      >
+                        閉じる
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {showPostMessageFloodWarning && (
+                  <div
+                    className="directoryEscapeOverlay postMessageFloodOverlay"
+                    role="alert"
+                  >
+                    <div className="directoryEscapeOverlayInner">
+                      <p className="directoryEscapeOverlayText">
+                        {POST_MESSAGE_FLOOD_WARNING}
+                      </p>
+                      <button
+                        type="button"
+                        className="directoryEscapeOverlayDismiss"
+                        onClick={() => setShowPostMessageFloodWarning(false)}
                       >
                         閉じる
                       </button>
