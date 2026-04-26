@@ -1,22 +1,39 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styles from "./assets/csp-sandbox-lab.module.css";
 
 export default function CspSandboxLabPage() {
   const [lines, setLines] = useState<string[]>([]);
 
   const log = useCallback((msg: string) => {
+    const now = new Date();
     const t =
-      typeof performance !== "undefined"
-        ? performance.now().toFixed(0)
-        : String(Date.now());
-    setLines((prev) => [...prev.slice(-80), "[" + t + "ms] " + msg]);
+      String(now.getHours()).padStart(2, "0") +
+      ":" +
+      String(now.getMinutes()).padStart(2, "0") +
+      ":" +
+      String(now.getSeconds()).padStart(2, "0") +
+      "." +
+      String(now.getMilliseconds()).padStart(3, "0");
+    setLines((prev) => [...prev.slice(-80), "[" + t + "] " + msg]);
   }, []);
 
   const clearLog = useCallback(() => {
     setLines([]);
   }, []);
+
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev.data;
+      if (typeof data !== "object" || data === null) return;
+      const o = data as { api_id?: unknown; content?: unknown };
+      if (o.api_id !== 3) return;
+      log("api_id:3 応答: " + JSON.stringify(o.content ?? null));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [log]);
 
   const tryFetchSameOrigin = useCallback(async () => {
     try {
@@ -250,6 +267,30 @@ export default function CspSandboxLabPage() {
     }
   }, [log]);
 
+  const tryApi3Concurrent = useCallback(() => {
+    if (window.parent === window) {
+      log("api_id:3 複数同時依頼: 親 iframe 外では実行できません");
+      return;
+    }
+    const req1 = {
+      api_id: 3,
+      content: {
+        code:
+          "var s = Date.now(); while (Date.now() - s < 1200) {} ; return 'job-1';",
+      },
+    };
+    const req2 = {
+      api_id: 3,
+      content: {
+        code:
+          "var s = Date.now(); while (Date.now() - s < 1200) {} ; return 'job-2';",
+      },
+    };
+    window.parent.postMessage(req1, "*");
+    window.parent.postMessage(req2, "*");
+    log("api_id:3 を2件連続送信（同時実行制限 1 件の挙動を確認）");
+  }, [log]);
+
   return (
     <div className={styles.app}>
       <h1 className={styles.pageTitle}>CSP / sandbox 制限デモ</h1>
@@ -321,6 +362,17 @@ export default function CspSandboxLabPage() {
         </button>
         <button type="button" className={styles.btn} onClick={tryObjectTag}>
           &lt;object&gt; で favicon
+        </button>
+      </section>
+
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>api_id:3（Worker 実行）</h2>
+        <p className={styles.desc}>
+          親ランナーに <code className={styles.inlineCode}>api_id:3</code>{" "}
+          を短時間に複数送信し、同時実行上限 1 件の制御（busy 応答）を確認します。
+        </p>
+        <button type="button" className={styles.btn} onClick={tryApi3Concurrent}>
+          api_id:3 を複数同時依頼
         </button>
       </section>
 

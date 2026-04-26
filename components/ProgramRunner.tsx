@@ -302,6 +302,7 @@ export function ProgramRunner() {
   const logListRef = useRef<HTMLUListElement>(null);
   const logEmptyRef = useRef<HTMLParagraphElement>(null);
   const bridgeBusyRef = useRef(false);
+  const workerBusyRef = useRef(false);
   /** postMessage ハンドラはクロージャが古いままになりがちなので、常に最新の programId を参照する */
   const selectedProgramIdRef = useRef<string | null>(null);
   /** iframe の src と同じ基準で許可ルートを onLoad 時に照合する */
@@ -920,6 +921,16 @@ export function ProgramRunner() {
       }
 
       if (isRunUserLogicRequest(ev.data)) {
+        if (workerBusyRef.current) {
+          const outBusy = {
+            api_id: 3,
+            content: { error: "worker_busy: 前の実行が完了するまで待ってください" },
+          };
+          appendLog("out", "api_id:3 → worker busy", outBusy);
+          (ev.source as Window).postMessage(outBusy, childReplyTarget);
+          return;
+        }
+        workerBusyRef.current = true;
         void (async () => {
           try {
             const data = ev.data as { content: { code: string } };
@@ -932,6 +943,8 @@ export function ProgramRunner() {
             const outErr = { api_id: 3, content: { error: msg } };
             appendLog("out", "api_id:3 → worker error", outErr);
             (ev.source as Window).postMessage(outErr, childReplyTarget);
+          } finally {
+            workerBusyRef.current = false;
           }
         })();
         return;
