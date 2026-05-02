@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { MainThreadWatchdog } from "@/components/MainThreadWatchdog";
 import { ProgramRunner } from "@/components/ProgramRunner";
 
 function LoadingMain() {
@@ -12,8 +13,11 @@ function LoadingMain() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<LoadingMain />}>
-      <ProgramRunner />
-    </Suspense>
+    <>
+      <MainThreadWatchdog />
+      <Suspense fallback={<LoadingMain />}>
+        <ProgramRunner />
+      </Suspense>
+    </>
   );
 }

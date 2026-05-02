@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { PrivacyModeToggle } from "@/components/PrivacyModeToggle";
+import { registerWatchdogPingAllowedGetter } from "@/lib/mainThreadWatchdogBridge";
 
 export type ChildProgram = {
   id: string;
@@ -52,6 +53,11 @@ const MAIN_THREAD_JANK_THRESHOLD_MS = 3000;
 /** 子フレームに postMessage ハートビートは送らず、子の `setTimeout(0)` が実行されるかだけ見る */
 const CHILD_EVENT_LOOP_PROBE_INTERVAL_MS = 1500;
 const CHILD_EVENT_LOOP_PROBE_TIMEOUT_MS = 3000;
+
+/** 子プローブ応答が無いとみなすまで（これを過ぎたら死活監視は pong しない） */
+const WATCHDOG_CHILD_PROBE_STUCK_MS = 800;
+/** 最後の子プローブ成功からの経過がこれを超えたら pong を止める */
+const WATCHDOG_CHILD_JANK_STALE_MS = 3500;
 
 const JANK_PONG_TYPE = "__runner_jank_pong" as const;
 
@@ -246,6 +252,9 @@ function runUserLogic(userCode: string): Promise<unknown> {
     const timeout = setTimeout(function () {
       worker.terminate();
       URL.revokeObjectURL(workerURL);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("progenjoy-program-worker-stalled"));
+      }
       reject(new Error("Timeout"));
     }, 3000);
     worker.onmessage = function (e) {
@@ -335,9 +344,15 @@ export function ProgramRunner() {
   const [iframeSrcOverride, setIframeSrcOverride] = useState<string | null>(
     null
   );
+  const iframeSrcOverrideRef = useRef(iframeSrcOverride);
+  iframeSrcOverrideRef.current = iframeSrcOverride;
   const iframeAlreadySuspendedRef = useRef(false);
   /** 子のイベントループ応答待ち（postMessage ではなく子側 setTimeout(0) の実行結果で判定） */
   const childProbeNonceRef = useRef<string | null>(null);
+  /** 子プローブ送信時刻（nonce とセットで死活監視が詰まり判定に使う） */
+  const childProbeStartedAtRef = useRef<number | null>(null);
+  /** 子から __runner_jank_pong を最後に受け取った時刻 */
+  const lastChildJankPongAtRef = useRef(Date.now());
   /** ブラウザのタイマー ID（Node の `Timeout` 型と衝突しないよう number） */
   const childProbeTimeoutRef = useRef<number | null>(null);
   /** 子からの postMessage 受信時刻（内部プローブ除く・レート検知用） */
@@ -455,7 +470,31 @@ export function ProgramRunner() {
     setShowPostMessageFloodWarning(false);
     setPostMessageOversizeBytes(null);
     childPostMessageTimestampsRef.current = [];
+    lastChildJankPongAtRef.current = Date.now();
   }, [selected?.path]);
+
+  useEffect(() => {
+    const getter = (): boolean => {
+      if (iframeSrcOverrideRef.current === "about:blank") return true;
+      const cw = iframeRef.current?.contentWindow;
+      if (!cw) return true;
+
+      const pending = childProbeNonceRef.current;
+      const started = childProbeStartedAtRef.current;
+      if (
+        pending !== null &&
+        started !== null &&
+        Date.now() - started >= WATCHDOG_CHILD_PROBE_STUCK_MS
+      ) {
+        return false;
+      }
+      return (
+        Date.now() - lastChildJankPongAtRef.current <
+        WATCHDOG_CHILD_JANK_STALE_MS
+      );
+    };
+    return registerWatchdogPingAllowedGetter(getter);
+  }, []);
 
   const suspendProgramIframe = useCallback((reason: string) => {
     if (iframeAlreadySuspendedRef.current) return;
@@ -465,6 +504,7 @@ export function ProgramRunner() {
       childProbeTimeoutRef.current = null;
     }
     childProbeNonceRef.current = null;
+    childProbeStartedAtRef.current = null;
     setDirectoryEscapeAbsoluteUrl(null);
     setShowPostMessageFloodWarning(false);
     setPostMessageOversizeBytes(null);
@@ -535,10 +575,12 @@ export function ProgramRunner() {
 
       const nonce = crypto.randomUUID();
       childProbeNonceRef.current = nonce;
+      childProbeStartedAtRef.current = Date.now();
       const tid = window.setTimeout(() => {
         childProbeTimeoutRef.current = null;
         if (childProbeNonceRef.current === nonce) {
           childProbeNonceRef.current = null;
+          childProbeStartedAtRef.current = null;
           suspendProgramIframe(CHILD_THREAD_JANK_MESSAGE);
         }
       }, CHILD_EVENT_LOOP_PROBE_TIMEOUT_MS);
@@ -561,6 +603,7 @@ export function ProgramRunner() {
           childProbeTimeoutRef.current = null;
         }
         childProbeNonceRef.current = null;
+        childProbeStartedAtRef.current = null;
       }
     };
 
@@ -576,6 +619,7 @@ export function ProgramRunner() {
         childProbeTimeoutRef.current = null;
       }
       childProbeNonceRef.current = null;
+      childProbeStartedAtRef.current = null;
     };
 
     const startProbe = () => {
@@ -817,6 +861,7 @@ export function ProgramRunner() {
         setDirectoryEscapeAbsoluteUrl(cw.location.href);
       } else {
         setDirectoryEscapeAbsoluteUrl(null);
+        lastChildJankPongAtRef.current = Date.now();
       }
     } catch {
       setDirectoryEscapeAbsoluteUrl(
@@ -841,6 +886,8 @@ export function ProgramRunner() {
           nonce === childProbeNonceRef.current
         ) {
           childProbeNonceRef.current = null;
+          childProbeStartedAtRef.current = null;
+          lastChildJankPongAtRef.current = Date.now();
           if (childProbeTimeoutRef.current !== null) {
             clearTimeout(childProbeTimeoutRef.current);
             childProbeTimeoutRef.current = null;

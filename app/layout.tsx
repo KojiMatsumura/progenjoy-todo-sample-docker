@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "プログラムテスト | ローカルランナー",
   description:
     "program-ec-frontend 向けローカルプログラム実行オリジン（Next.js）",
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
 };
 
 export default function RootLayout({
