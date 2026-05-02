@@ -46,10 +46,6 @@ const maxEntries = 200;
 const DIRECTORY_ESCAPE_WARNING =
   "不正なパスにリダイレクトしています。作成したプログラムの範囲外へのリダイレクトは許可されていません。";
 
-/** 監視ページ（親）のイベントループが目安としてこれ以上遅れたら重いとみなす */
-const MAIN_THREAD_WATCH_TICK_MS = 200;
-const MAIN_THREAD_JANK_THRESHOLD_MS = 3000;
-
 /** 子フレームに postMessage ハートビートは送らず、子の `setTimeout(0)` が実行されるかだけ見る */
 const CHILD_EVENT_LOOP_PROBE_INTERVAL_MS = 1500;
 const CHILD_EVENT_LOOP_PROBE_TIMEOUT_MS = 3000;
@@ -60,9 +56,6 @@ const WATCHDOG_CHILD_PROBE_STUCK_MS = 800;
 const WATCHDOG_CHILD_JANK_STALE_MS = 3500;
 
 const JANK_PONG_TYPE = "__runner_jank_pong" as const;
-
-const MAIN_THREAD_JANK_MESSAGE =
-  "監視ページのメインスレッドが3秒以上まともに動いていません。ブラウザ全体やこのタブが非常に重い可能性があります。プログラムの表示（iframe）を停止しました。";
 
 const CHILD_THREAD_JANK_MESSAGE =
   "プログラム（iframe）のメインスレッドが3秒以上応答しませんでした。無限ループなどで重くなっている可能性があるため、表示（iframe）を停止しました。";
@@ -512,53 +505,6 @@ export function ProgramRunner() {
     setIframeSrcOverride("about:blank");
     setIframeSuspendedMessage(reason);
   }, []);
-
-  /** 監視ページ（親）のイベントループ遅延検知 — 子へのハートビート postMessage は使わない */
-  useEffect(() => {
-    if (iframeSrcOverride === "about:blank") return;
-    let expected = performance.now() + MAIN_THREAD_WATCH_TICK_MS;
-    let intervalId: number | null = null;
-
-    const stopWatch = () => {
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const startWatch = () => {
-      if (intervalId !== null) return;
-      expected = performance.now() + MAIN_THREAD_WATCH_TICK_MS;
-      intervalId = window.setInterval(() => {
-        if (iframeAlreadySuspendedRef.current) return;
-        const now = performance.now();
-        const drift = now - expected;
-        const tick = MAIN_THREAD_WATCH_TICK_MS;
-        expected += tick * Math.max(1, Math.round(drift / tick));
-        if (drift >= MAIN_THREAD_JANK_THRESHOLD_MS) {
-          suspendProgramIframe(MAIN_THREAD_JANK_MESSAGE);
-          stopWatch();
-        }
-      }, MAIN_THREAD_WATCH_TICK_MS);
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        stopWatch();
-        return;
-      }
-      startWatch();
-    };
-
-    if (document.visibilityState !== "hidden") {
-      startWatch();
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      stopWatch();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [selected?.path, iframeSrcOverride, suspendProgramIframe]);
 
   /**
    * 子フレームのキューに `setTimeout(0)` を積むだけ（子プログラムのコード変更や postMessage ハートビート不要）。
