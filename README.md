@@ -1,16 +1,49 @@
 # progenjoy-todo-sample-docker
 
-`program-ec-frontend` のプログラムテスト／アップロード後プレビューで使う **プログラム実行用オリジン** を、ローカルで再現するための **Next.js** 構成です。
+[ProgEnjoy](https://progenjoy.com)にアップロードするプログラムをローカルで検証するためのツールです
 
 ## 何ができるか
 
-- **`/`（トップ）** … タイトル・説明、16:10 の実行ビュー、通信ログ。内側の iframe は一覧の先頭（フォールバック時は **`/programs/todo-app/`**）を読み込みます。`?name=商品名` で見出しだけ変えられます。
-- **`/programs/<programId>/...`** … `_sites` 配下の静的子サイト用。`app/programs/_sites/<programId>/` にフォルダがあるときだけ配信し、**無い `programId` は 404** です（Next アプリとして実装している `app/programs/<programId>/` は別ルート）。
-- **旧 URL** … `next.config.ts` の `redirects` で **`/child/...` → `/programs/...`**、**`/program/...` → `/programs/...`** に寄せています。
-- **`/api/child-programs`** … `app/programs/_sites` 直下のフォルダ名を走査し、トップのプルダウン用の一覧を JSON で返します。
-- **`/api/runner-data/<programId>`** … トップの postMessage ブリッジ用（`GET` / `PUT`）。**`data/<programId>/data.json`** を読み書きします。
+- **`/`（トップ）** ProgEnjoyのプログラム詳細画面を再現しています。基本的にはこの画面にアクセスして確認してください。
+  - 外部通信などができず、ブロックされて動かないという挙動を再現しています。
+  - postMessageが意図した通りに動いているかは右側の通信ログで確認できます。
+  - バリデーションはアップロード時に行われるバリデーションの一部を再現しています。バリデーション結果は通信ログに出るので失敗した場合は修正してからアップロードしてください。
 
-ユーザー作成プログラムの置き場所は **`app/programs/_sites/<programId>/` のみ**です（`_sites` は Next.js のルート対象外のため、`app/programs/[programId]/` の API ルートと共存します）。
+投稿するプログラムの置き場所は **`app/programs/<programId>/`** です。
+プログラムの例をいくつか作ってあるので、それらを参考にしてください。
+
+## プログラム例
+
+このリポジトリの`app/programs`にすでにある各フォルダは **ProgEnjoy で想定されるプログラム** のサンプルです。実装の題材にするときの狙いを以下にまとめます。
+
+### todo-app
+
+- **親とのデータ連携**: `postMessage` で **`api_id: 1`（取得）** と **`api_id: 2`（保存）** を呼び出す実装をしています。
+  - ユーザー入力のデータの取得と保存はユーザー入力のデータ全体のみになります。TODO1個ずつ保存ではなく更新後の全体を保存するようにしてください。
+  - ユーザーがプライバシーモードを ON にしているときはこれらの API の実行が保留され、ユーザーが解除すると実行されます。
+- **依存ライブラリ**: 一覧画面は`dependencies-list.json`から **Luxon** と **Zod** を読み込み、詳細画面は`dependencies-detail.json`から **Luxon** を読み込んでいます。
+  - 依存ライブラリのロードはページごとに定義してください。
+  - ライブラリをロードできない場合は`config/program-library-policy.json`の`allowedPackages`にライブラリを追加してください。その場合は本番のライブラリ一覧で対象のライブラリが許可されているかどうかを確認してください。
+  - 本番では公開されてから7日以上経過している、かつ`npm audit --audit-level=high`でエラーにならないバージョンを許可しています。基本的には公開されてから7日以上経過している最新バージョンを使ってください。
+- **画面構成**: 一覧ページと **`/programs/todo-app/detail/[id]`** の詳細ページがあります。
+
+### prime-checker
+
+- **`api_id: 3`（Worker実行）**: 入力した整数について素数判定をする **JavaScriptのコード**を親へ送り、親側の **専用 Worker** 内で実行して結果だけを受け取ります。
+- **狙い**: 重い処理やユーザーが書いたロジックを **子ページのメインスレッドではなく Worker で実行する**流れのサンプルです。
+  - 3秒でタイムアウトするコードを付与してから実行します。3秒以上かかる処理は分割するようにしてください。
+
+### debug-abuse
+
+- **用途**: 「禁止されている挙動」を **わざと** 試す検証用ページです。**本番・公開プログラムでは真似しないでください。**
+- **含まれる例**: 許容パス外へのリダイレクト（ルート・API・別 program・外部ドメイン）、**postMessage の大量連打**、**大きなペイロードの postMessage**、メインスレッドでの **無限ループ**
+- **狙い**: レート制限・ペイロード制限・iframe 停止などがどう反応するかを確認するための素材です。
+
+### csp-sandbox-lab
+
+- **用途**: セキュリティ上の理由でプログラムの実行環境に付与している **CSP（Content-Security-Policy）** と **`sandbox` 属性**のせいで、よくあるコードが期待どおりに動かないことをログに残します。
+- **試せる例**: 同一オリジン／外部への **fetch**、**XHR**、**WebSocket**、**Blob Worker**、iframe のネスト、**`window.open` / `confirm` / `alert`**、**フォーム送信**、外部画像・CSS、**`sendBeacon`**、**`object`**、および **`api_id: 3` を連続送信したときの直列化**など。
+- **結果**: ブラウザ等で結果は変わります。ブロック時は下にあるログに理由のヒントが出ます。
 
 ## 開発（Docker なし）
 
@@ -29,39 +62,8 @@ mkdir -p data && docker compose up --build -d
 
 ホストの **8787** がコンテナの **3000** にマッピングされます。
 
-## program-ec-frontend 側の環境変数
-
-```bash
-NEXT_PUBLIC_PROGRAM_RUNNER_DOMAIN=http://localhost:8787
-```
-
-iframe は **`http://localhost:8787/programs/<商品ID>/`** の形で読み込めます（`_sites` に対応フォルダが無い場合は静的配信は 404 になります）。
-
-## 子サイトの置き場所
-
-| programId（フォルダ名） | パス | URL 例 |
-| --- | --- | --- |
-| 任意（例: `todo-app` のプレースホルダ） | `app/programs/_sites/<programId>/` | `/programs/<programId>/`（`_sites` にフォルダがある場合のみ） |
-
-環境変数 **`PROGRAM_SITES_DIR`**（互換: `CHILDREN_DIR`）で別パスに差し替え可能です。
-
-## 子サイトの CSP
-
-`/programs/*` には `middleware.ts` で Content-Security-Policy を付与しています。`frame-ancestors` を変えたい場合は **`CHILD_SITE_CSP`** で上書きするか、`middleware.ts` を編集してください。
-
-## postMessage と data.json（トップ `/` のみ）
-
-- **api_id:1** → `GET /api/runner-data/<選択中の programId>`
-- **api_id:2** → `PUT /api/runner-data/<選択中の programId>`
-- **api_id:3** → 親ページ内の Web Worker でユーザコードを実行
-
 ## 疎通確認
 
 ```bash
 curl -s http://localhost:8787/health
 ```
-
-## 補足
-
-- 永続化は **`data/<programId>/data.json`**（`DATA_DIR` 環境変数でルートを変更可）です。
-- `sandbox="allow-scripts"` の iframe 内で動作します。追加権限が必要な場合は sandbox を確認してください。
