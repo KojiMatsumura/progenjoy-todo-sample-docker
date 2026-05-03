@@ -185,7 +185,7 @@ export default function TodoDetailPage() {
       const next = norm.items.filter((x) => x.id !== id);
       const content = buildContentForSave(lastContentRef.current, next);
       await requestSave(content);
-      router.push("/programs/todo-app/");
+      router.push("/programs/todo-app");
     } catch (e) {
       setStatusLine(e instanceof Error ? e.message : String(e), true);
     }
@@ -220,7 +220,7 @@ export default function TodoDetailPage() {
   return (
     <div className={styles.app}>
       <p className={styles.backRow}>
-        <Link className={styles.backLink} href="/programs/todo-app/">
+        <Link className={styles.backLink} href="/programs/todo-app">
           ← 一覧へ戻る
         </Link>
       </p>
@@ -237,7 +237,7 @@ export default function TodoDetailPage() {
         <div className={styles.notFound}>
           <p>該当する TODO が見つかりません。</p>
           <p>
-            <Link href="/programs/todo-app/">一覧へ</Link>
+            <Link href="/programs/todo-app">一覧へ</Link>
           </p>
         </div>
       ) : item ? (

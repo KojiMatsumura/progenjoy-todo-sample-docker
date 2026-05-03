@@ -6,9 +6,6 @@ services:
     environment:
       # api_id:1/2 は data/<programId>/data.json（DATA_DIR 直下）
       DATA_DIR: /app/data
-      # リポジトリでは app/programs/_sites。Docker の cwd は /app のため二重 app
-      PROGRAM_SITES_DIR: /app/app/programs/_sites
       PORT: 3000
     volumes:
       - ./data:/app/data
-      - ./app/programs/_sites:/app/app/programs/_sites:ro

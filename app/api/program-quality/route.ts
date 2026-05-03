@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { getProgramSitesDir } from "@/lib/paths";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +26,7 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 /**
- * 表示中の子プログラムのソースルート（Next アプリ優先、無ければ _sites）。
+ * 表示中の子プログラムのソースルート（Next アプリ優先、無ければ getProgramSitesDir）。
  * パストラバーサル防止のため programId は英数字・ハイフン・アンダースコアのみ。
  */
 async function resolveProgramSourceRoot(
@@ -35,7 +36,7 @@ async function resolveProgramSourceRoot(
   if (!PROGRAM_ID_SAFE.test(programId)) return null;
   const programs = path.join(cwd, "app", "programs");
   const nextApp = path.join(programs, programId);
-  const siteDir = path.join(programs, "_sites", programId);
+  const siteDir = path.join(getProgramSitesDir(), programId);
 
   const hasNextPage = await pathExists(path.join(nextApp, "page.tsx"));
   const hasNextLayout = await pathExists(path.join(nextApp, "layout.tsx"));

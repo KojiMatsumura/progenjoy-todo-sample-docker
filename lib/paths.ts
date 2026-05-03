@@ -22,15 +22,21 @@ export function getDataFilePath(): string {
   return process.env.DATA_FILE ?? path.join(process.cwd(), "data.json");
 }
 
+/** Next の子プログラムルート: `app/programs/<programId>/` */
+export function getProgramsAppDir(): string {
+  return path.join(process.cwd(), "app", "programs");
+}
+
 /**
- * ユーザー作成プログラム（iframe 子）の置き場。
- * `app/programs/_sites/<programId>/`（`_` 始まりは Next のルート対象外）
+ * オプションの静的ファイル束ね置き場（例: 純 HTML バンドル）。
+ * 既定はリポジトリ直下の `program-sites/`（無ければ静的 route は 404）。
+ * `PROGRAM_SITES_DIR` / `CHILDREN_DIR` で上書き可。
  */
 export function getProgramSitesDir(): string {
   return (
     process.env.PROGRAM_SITES_DIR ??
     process.env.CHILDREN_DIR ??
-    path.join(process.cwd(), "app", "programs", "_sites")
+    path.join(process.cwd(), "program-sites")
   );
 }
 

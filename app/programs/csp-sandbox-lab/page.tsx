@@ -128,7 +128,7 @@ export default function CspSandboxLabPage() {
   const tryNestedIframe = useCallback(() => {
     try {
       const el = document.createElement("iframe");
-      el.src = "/programs/todo-app/";
+      el.src = "/programs/todo-app";
       el.title = "nested";
       el.style.width = "1px";
       el.style.height = "1px";

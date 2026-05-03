@@ -13,33 +13,6 @@ export type ChildProgram = {
   iframeTitle: string;
 };
 
-const FALLBACK_CHILD_PROGRAMS: ChildProgram[] = [
-  {
-    id: "todo-app",
-    label: "TODO（/programs/todo-app/）",
-    path: "/programs/todo-app/",
-    iframeTitle: "TODO リスト",
-  },
-  {
-    id: "prime-checker",
-    label: "素数判定（/programs/prime-checker/）",
-    path: "/programs/prime-checker/",
-    iframeTitle: "素数判定",
-  },
-  {
-    id: "debug-abuse",
-    label: "不正行為テスト（/programs/debug-abuse/）",
-    path: "/programs/debug-abuse/",
-    iframeTitle: "不正行為テスト",
-  },
-  {
-    id: "csp-sandbox-lab",
-    label: "CSP / sandbox 制限デモ（/programs/csp-sandbox-lab/）",
-    path: "/programs/csp-sandbox-lab/",
-    iframeTitle: "CSP / sandbox 制限デモ",
-  },
-];
-
 const childReplyTarget = "*";
 const maxEntries = 200;
 
@@ -139,12 +112,13 @@ type PrivacyReplayItem =
 function findProgramById(
   programs: ChildProgram[],
   id: string | null
-): ChildProgram {
+): ChildProgram | null {
+  if (programs.length === 0) return null;
   if (id) {
     const hit = programs.find((p) => p.id === id);
     if (hit) return hit;
   }
-  return programs[0]!;
+  return programs[0] ?? null;
 }
 
 function pad2(n: number): string {
@@ -308,7 +282,7 @@ export function ProgramRunner() {
   /** postMessage ハンドラはクロージャが古いままになりがちなので、常に最新の programId を参照する */
   const selectedProgramIdRef = useRef<string | null>(null);
   /** iframe の src と同じ基準で許可ルートを onLoad 時に照合する */
-  const selectedProgramPathRef = useRef<string>("/programs/todo-app/");
+  const selectedProgramPathRef = useRef<string>("/programs/todo-app");
 
   const [programs, setPrograms] = useState<ChildProgram[] | null>(null);
   const [selected, setSelected] = useState<ChildProgram | null>(null);
@@ -414,30 +388,17 @@ export function ProgramRunner() {
         });
         if (!r.ok) throw new Error("bad status");
         const j = (await r.json()) as { programs?: ChildProgram[] };
-        if (
-          cancelled ||
-          !j.programs ||
-          !Array.isArray(j.programs) ||
-          !j.programs.length
-        ) {
-          if (!cancelled) {
-            setPrograms(FALLBACK_CHILD_PROGRAMS);
-            setSelected(
-              findProgramById(FALLBACK_CHILD_PROGRAMS, programFromUrl)
-            );
-          }
-          return;
-        }
+        const list = Array.isArray(j.programs) ? j.programs : [];
         if (!cancelled) {
-          setPrograms(j.programs);
-          setSelected(findProgramById(j.programs, programFromUrl));
+          setPrograms(list);
+          setSelected(
+            list.length > 0 ? findProgramById(list, programFromUrl) : null
+          );
         }
       } catch {
         if (!cancelled) {
-          setPrograms(FALLBACK_CHILD_PROGRAMS);
-          setSelected(
-            findProgramById(FALLBACK_CHILD_PROGRAMS, programFromUrl)
-          );
+          setPrograms([]);
+          setSelected(null);
         }
       }
     })();
@@ -452,7 +413,7 @@ export function ProgramRunner() {
 
   useEffect(() => {
     selectedProgramPathRef.current =
-      selected?.path ?? "/programs/todo-app/";
+      selected?.path ?? "/programs/todo-app";
   }, [selected?.path]);
 
   useEffect(() => {
@@ -696,6 +657,7 @@ export function ProgramRunner() {
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       if (!programs) return;
       const next = findProgramById(programs, e.target.value);
+      if (!next) return;
       setSelected(next);
       setProgramQueryInUrl(next.id);
       clearLog();
@@ -1043,7 +1005,7 @@ export function ProgramRunner() {
   const iframeSrc =
     iframeSrcOverride !== null
       ? iframeSrcOverride
-      : (selected?.path ?? "/programs/todo-app/");
+      : (selected?.path ?? "/programs/todo-app");
 
   return (
     <main className="main">
@@ -1068,6 +1030,9 @@ export function ProgramRunner() {
             onChange={onSelectChange}
           >
             {!programs && <option value="">一覧を読み込み中…</option>}
+            {programs && programs.length === 0 && (
+              <option value="">一覧を取得できませんでした</option>
+            )}
             {programs?.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
