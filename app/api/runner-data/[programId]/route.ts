@@ -96,9 +96,37 @@ export async function PUT(
       content: (body as { content: Record<string, unknown> }).content,
     };
     const file = await ensureProgramDataFileParent(programId);
-    await fs.writeFile(file, JSON.stringify(out, null, 2), "utf8");
+    let serialized: string;
+    try {
+      serialized = JSON.stringify(out, null, 2);
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error: "json_stringify_failed",
+          detail: e instanceof Error ? e.message : String(e),
+        },
+        { status: 500 }
+      );
+    }
+    try {
+      await fs.writeFile(file, serialized, "utf8");
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error: "write_failed",
+          detail: e instanceof Error ? e.message : String(e),
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(out);
-  } catch {
-    return NextResponse.json({ error: "server_error" }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: "server_error",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 500 }
+    );
   }
 }

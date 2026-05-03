@@ -639,15 +639,15 @@ export function ProgramRunner() {
     if (prev !== true || privacyMode !== false) return;
     if (privacyReplayQueueRef.current.length === 0) return;
 
-    const queue = [...privacyReplayQueueRef.current];
-    privacyReplayQueueRef.current = [];
-
     const programId = resolveBridgeProgramId(
       selectedProgramIdRef.current,
       selectedProgramPathRef.current
     );
     const cw = iframeRef.current?.contentWindow;
     if (!programId || !cw) return;
+
+    const queue = [...privacyReplayQueueRef.current];
+    privacyReplayQueueRef.current = [];
 
     void (async () => {
       for (const item of queue) {
@@ -684,10 +684,11 @@ export function ProgramRunner() {
           }
         } catch (err) {
           appendLog("out", "privacy replay network_error", String(err));
-          cw.postMessage(
-            { error: true, status: 500, message: "network_error" },
-            childReplyTarget
-          );
+          replyToChildSource(cw, {
+            error: true,
+            status: 500,
+            message: "network_error",
+          });
         }
       }
     })();
@@ -975,9 +976,20 @@ export function ProgramRunner() {
       if (isApi043(ev.data)) {
         if (privacyModeRef.current) {
           const data = ev.data as { content: Record<string, unknown> };
+          let cloned: Record<string, unknown>;
+          try {
+            cloned =
+              typeof structuredClone === "function"
+                ? structuredClone(data.content)
+                : (JSON.parse(
+                    JSON.stringify(data.content)
+                  ) as Record<string, unknown>);
+          } catch {
+            cloned = data.content;
+          }
           privacyReplayQueueRef.current.push({
             api_id: 2,
-            content: data.content,
+            content: cloned,
           });
           setShowPrivacyBlockedWarning(true);
           appendLog(

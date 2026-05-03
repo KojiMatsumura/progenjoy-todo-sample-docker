@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ApiPayload } from "./todoModel";
 
+/** 親がプライバシー解除後にリプレイした応答など、pending が無いときに同期する */
+export const RUNNER_BRIDGE_DATA_EVENT = "runner-bridge-data";
+
 type Pending = {
   cb: (err: Error | null, data: ApiPayload | null) => void;
 } | null;
@@ -69,7 +72,27 @@ export function useTodoBridge() {
       if (!isBridgeReplyFromRunner(ev)) return;
       const d = ev.data;
       const pr = pendingRef.current;
-      if (!pr) return;
+      if (!pr) {
+        if (!isRunnerBridgeReply(d)) return;
+        const ghost = d as {
+          error?: unknown;
+          message?: string;
+          content?: unknown;
+        };
+        if (
+          "error" in ghost &&
+          ghost.error != null &&
+          ghost.error !== false
+        ) {
+          return;
+        }
+        window.dispatchEvent(
+          new CustomEvent(RUNNER_BRIDGE_DATA_EVENT, {
+            detail: d as ApiPayload,
+          })
+        );
+        return;
+      }
       if (!isRunnerBridgeReply(d)) return;
 
       const finish = (err: Error | null, data: ApiPayload | null) => {

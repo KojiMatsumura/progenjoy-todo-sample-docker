@@ -6,11 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../../assets/todo-app.module.css";
 import dependencies from "../../assets/dependencies-detail.json";
 import { loadLibrariesFromManifest } from "@/lib/programDependencyLoader";
-import { useTodoBridge } from "../../lib/useTodoBridge";
+import {
+  RUNNER_BRIDGE_DATA_EVENT,
+  useTodoBridge,
+} from "../../lib/useTodoBridge";
 import {
   buildContentForSave,
   formatDateLong,
   normalizeItemsFromRoot,
+  type ApiPayload,
   type TodoItem,
 } from "../../lib/todoModel";
 
@@ -51,6 +55,42 @@ export default function TodoDetailPage() {
     setStatus(msg);
     setStatusError(!!isError);
   }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    const onExternalData = (ev: Event) => {
+      const d = (ev as CustomEvent<ApiPayload>).detail;
+      if (
+        !d ||
+        typeof d.content !== "object" ||
+        d.content === null ||
+        Array.isArray(d.content)
+      ) {
+        return;
+      }
+      const root = d.content;
+      lastContentRef.current = root;
+      setLastContent(root);
+      const norm = normalizeItemsFromRoot(root);
+      const found = norm.items.find((x) => x.id === id);
+      if (found) {
+        setItem(found);
+        setDone(found.done);
+        setNotFound(false);
+        setStatusLine("データを同期しました（プライバシー解除後のリプレイなど）");
+      }
+    };
+    window.addEventListener(
+      RUNNER_BRIDGE_DATA_EVENT,
+      onExternalData as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        RUNNER_BRIDGE_DATA_EVENT,
+        onExternalData as EventListener
+      );
+    };
+  }, [id, setStatusLine]);
 
   useEffect(() => {
     let cancelled = false;
