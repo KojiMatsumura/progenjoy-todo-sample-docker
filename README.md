@@ -12,6 +12,15 @@
 投稿するプログラムの置き場所は **`app/programs/<programId>/`** です。
 プログラムの例をいくつか作ってあるので、それらを参考にしてください。
 
+## 開発
+
+```bash
+npm install
+npm run dev
+```
+
+既定で **http://localhost:8787** で起動します。永続データ（`api_id: 1/2`）はリポジトリ直下の **`data/<programId>/data.json`** に保存されます。初回は `data` ディレクトリを作成しておくとよいです。
+
 ## プログラム例
 
 このリポジトリの`app/programs`にすでにある各フォルダは **ProgEnjoy で想定されるプログラム** のサンプルです。実装の題材にするときの狙いを以下にまとめます。
@@ -44,26 +53,3 @@
 - **用途**: セキュリティ上の理由でプログラムの実行環境に付与している **CSP（Content-Security-Policy）** と **`sandbox` 属性**のせいで、よくあるコードが期待どおりに動かないことをログに残します。
 - **試せる例**: 同一オリジン／外部への **fetch**、**XHR**、**WebSocket**、**Blob Worker**、iframe のネスト、**`window.open` / `confirm` / `alert`**、**フォーム送信**、外部画像・CSS、**`sendBeacon`**、**`object`**、および **`api_id: 3` を連続送信したときの直列化**など。
 - **結果**: ブラウザ等で結果は変わります。ブロック時は下にあるログに理由のヒントが出ます。
-
-## 開発（Docker なし）
-
-```bash
-npm install
-npm run dev
-```
-
-既定で **http://localhost:8787** で起動します。
-
-## Docker で起動
-
-```bash
-mkdir -p data && docker compose up --build -d
-```
-
-ホストの **8787** がコンテナの **3000** にマッピングされます。
-
-## 疎通確認
-
-```bash
-curl -s http://localhost:8787/health
-```

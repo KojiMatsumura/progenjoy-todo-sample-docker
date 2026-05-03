@@ -1,7 +1,0 @@
-node_modules
-.next
-.git
-*.md
-.DS_Store
-data.json
-data/

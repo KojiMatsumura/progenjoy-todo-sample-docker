@@ -253,8 +253,23 @@ function runUserLogic(userCode: string): Promise<unknown> {
   });
 }
 
+/** `MessageEvent.source` は null になり得る。iframe 破棄後の postMessage は例外になり得る */
+function replyToChildSource(
+  source: MessageEventSource | null,
+  message: unknown
+): void {
+  if (source == null) return;
+  try {
+    if (typeof Window !== "undefined" && source instanceof Window) {
+      source.postMessage(message, childReplyTarget);
+    }
+  } catch {
+    /* detached iframe など */
+  }
+}
+
 function postBackToChild(
-  source: Window,
+  source: MessageEventSource | null,
   res: Response,
   body: unknown
 ): void {
@@ -267,7 +282,7 @@ function postBackToChild(
   } else {
     payload = body;
   }
-  source.postMessage(payload, childReplyTarget);
+  replyToChildSource(source, payload);
 }
 
 export function ProgramRunner() {
@@ -781,7 +796,7 @@ export function ProgramRunner() {
   useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
       const cw = iframeRef.current?.contentWindow;
-      if (ev.source !== cw) return;
+      if (ev.source == null || ev.source !== cw) return;
 
       if (
         typeof ev.data === "object" &&
@@ -831,19 +846,17 @@ export function ProgramRunner() {
             "api_id:1 → blocked (privacy mode)",
             PRIVACY_MODE_RESPONSE
           );
-          (ev.source as Window).postMessage(
-            PRIVACY_MODE_RESPONSE,
-            childReplyTarget
-          );
+          replyToChildSource(ev.source, PRIVACY_MODE_RESPONSE);
           return;
         }
         const programId = selectedProgramIdRef.current;
         if (!programId) {
           appendLog("out", "api_id:1 → program 未選択", null);
-          (ev.source as Window).postMessage(
-            { error: true, status: 400, message: "no_program_selected" },
-            childReplyTarget
-          );
+          replyToChildSource(ev.source, {
+            error: true,
+            status: 400,
+            message: "no_program_selected",
+          });
           return;
         }
         if (bridgeBusyRef.current) return;
@@ -861,13 +874,14 @@ export function ProgramRunner() {
               "api_id:1 → data/" + programId + "/data.json 読込",
               body
             );
-            postBackToChild(ev.source as Window, res, body);
+            postBackToChild(ev.source, res, body);
           } catch (err) {
             appendLog("out", "api_id:1 network_error", String(err));
-            (ev.source as Window).postMessage(
-              { error: true, status: 500, message: "network_error" },
-              childReplyTarget
-            );
+            replyToChildSource(ev.source, {
+              error: true,
+              status: 500,
+              message: "network_error",
+            });
           } finally {
             bridgeBusyRef.current = false;
           }
@@ -882,7 +896,7 @@ export function ProgramRunner() {
             content: { error: "worker_busy: 前の実行が完了するまで待ってください" },
           };
           appendLog("out", "api_id:3 → worker busy", outBusy);
-          (ev.source as Window).postMessage(outBusy, childReplyTarget);
+          replyToChildSource(ev.source, outBusy);
           return;
         }
         workerBusyRef.current = true;
@@ -892,12 +906,12 @@ export function ProgramRunner() {
             const result = await runUserLogic(data.content.code);
             const out = { api_id: 3, content: { result } };
             appendLog("out", "api_id:3 → worker OK", out);
-            (ev.source as Window).postMessage(out, childReplyTarget);
+            replyToChildSource(ev.source, out);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             const outErr = { api_id: 3, content: { error: msg } };
             appendLog("out", "api_id:3 → worker error", outErr);
-            (ev.source as Window).postMessage(outErr, childReplyTarget);
+            replyToChildSource(ev.source, outErr);
           } finally {
             workerBusyRef.current = false;
           }
@@ -918,19 +932,17 @@ export function ProgramRunner() {
             "api_id:2 → blocked (privacy mode)",
             PRIVACY_MODE_RESPONSE
           );
-          (ev.source as Window).postMessage(
-            PRIVACY_MODE_RESPONSE,
-            childReplyTarget
-          );
+          replyToChildSource(ev.source, PRIVACY_MODE_RESPONSE);
           return;
         }
         const programId = selectedProgramIdRef.current;
         if (!programId) {
           appendLog("out", "api_id:2 → program 未選択", null);
-          (ev.source as Window).postMessage(
-            { error: true, status: 400, message: "no_program_selected" },
-            childReplyTarget
-          );
+          replyToChildSource(ev.source, {
+            error: true,
+            status: 400,
+            message: "no_program_selected",
+          });
           return;
         }
         if (bridgeBusyRef.current) return;
@@ -952,13 +964,14 @@ export function ProgramRunner() {
               "api_id:2 → data/" + programId + "/data.json 保存",
               body
             );
-            postBackToChild(ev.source as Window, res, body);
+            postBackToChild(ev.source, res, body);
           } catch (err) {
             appendLog("out", "api_id:2 network_error", String(err));
-            (ev.source as Window).postMessage(
-              { error: true, status: 500, message: "network_error" },
-              childReplyTarget
-            );
+            replyToChildSource(ev.source, {
+              error: true,
+              status: 500,
+              message: "network_error",
+            });
           } finally {
             bridgeBusyRef.current = false;
           }
