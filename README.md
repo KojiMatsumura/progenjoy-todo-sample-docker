@@ -2,6 +2,16 @@
 
 [ProgEnjoy](https://progenjoy.com)にアップロードするプログラムをローカルで検証するためのツールです
 
+## 開発
+
+```bash
+npm install
+npm run dev
+```
+
+既定で **http://localhost:8787** で起動します。
+プログラムで作ったデータはリポジトリ直下の **`data/<programId>/data.json`** に保存されます。
+
 ## 何ができるか
 
 - **`/`（トップ）** ProgEnjoyのプログラム詳細画面を再現しています。基本的にはこの画面にアクセスして確認してください。
@@ -11,15 +21,6 @@
 
 投稿するプログラムの置き場所は **`app/programs/<programId>/`** です。
 プログラムの例をいくつか作ってあるので、それらを参考にしてください。
-
-## 開発
-
-```bash
-npm install
-npm run dev
-```
-
-既定で **http://localhost:8787** で起動します。永続データ（`api_id: 1/2`）はリポジトリ直下の **`data/<programId>/data.json`** に保存されます。初回は `data` ディレクトリを作成しておくとよいです。
 
 ## プログラム例
 
