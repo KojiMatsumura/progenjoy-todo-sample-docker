@@ -7,7 +7,8 @@ export function isValidProgramIdForData(id: string): boolean {
 }
 
 /**
- * 子プログラムごとの永続化先: `data/<programId>/data.json`（または DATA_DIR 配下）
+ * 子プログラムごとの永続化先: `data/<programId>/data.json`（または DATA_DIR 配下）。
+ * ディレクトリの作成は API（runner-data）側で行う。
  */
 export function getProgramDataFilePath(programId: string): string {
   if (!isValidProgramIdForData(programId)) {

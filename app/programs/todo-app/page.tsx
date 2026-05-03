@@ -49,6 +49,7 @@ export default function TodoListPage() {
   };
   const { requestRead, requestSave, hasParent } = useTodoBridge();
   const [items, setItems] = useState<TodoItem[]>([]);
+  const itemsRef = useRef<TodoItem[]>([]);
   const [lastContent, setLastContent] = useState<Record<string, unknown>>({});
   const lastContentRef = useRef<Record<string, unknown>>({});
   const [status, setStatus] = useState("");
@@ -59,6 +60,10 @@ export default function TodoListPage() {
   useEffect(() => {
     lastContentRef.current = lastContent;
   }, [lastContent]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const setStatusLine = useCallback((msg: string, isError?: boolean) => {
     setStatus(msg);
@@ -214,24 +219,22 @@ export default function TodoListPage() {
 
   const onToggleDone = useCallback(
     (id: string, done: boolean) => {
-      setItems((prev) => {
-        const next = prev.map((x) =>
-          x.id === id ? { ...x, done } : x
-        );
-        void persist(next);
-        return next;
-      });
+      const next = itemsRef.current.map((x) =>
+        x.id === id ? { ...x, done } : x
+      );
+      itemsRef.current = next;
+      setItems(next);
+      void persist(next);
     },
     [persist]
   );
 
   const onDelete = useCallback(
     (id: string) => {
-      setItems((prev) => {
-        const next = prev.filter((x) => x.id !== id);
-        void persist(next);
-        return next;
-      });
+      const next = itemsRef.current.filter((x) => x.id !== id);
+      itemsRef.current = next;
+      setItems(next);
+      void persist(next);
     },
     [persist]
   );
@@ -266,20 +269,17 @@ export default function TodoListPage() {
         return;
       }
       const t = titleResult.success ? title.trim() : "";
-      setItems((prev) => {
-        const next = [
-          ...prev,
-          {
-            id: genTodoId(),
-            title: t,
-            done: false,
-            createdAt: new Date().toISOString(),
-            dueAt: dueAt || undefined,
-          },
-        ];
-        void persist(next);
-        return next;
-      });
+      const newItem: TodoItem = {
+        id: genTodoId(),
+        title: t,
+        done: false,
+        createdAt: new Date().toISOString(),
+        dueAt: dueAt || undefined,
+      };
+      const next = [...itemsRef.current, newItem];
+      itemsRef.current = next;
+      setItems(next);
+      void persist(next);
     },
     [persist, setStatusLine, zodLib]
   );

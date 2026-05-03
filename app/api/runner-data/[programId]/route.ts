@@ -6,11 +6,40 @@ import {
   isValidProgramIdForData,
 } from "@/lib/paths";
 
-async function readStore(programId: string) {
+/** `data/` や `data/<programId>/` が無くても `data.json` 用のディレクトリを作成する */
+async function ensureProgramDataFileParent(programId: string): Promise<string> {
   const file = getProgramDataFilePath(programId);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  return file;
+}
+
+async function readStore(programId: string) {
+  const file = await ensureProgramDataFileParent(programId);
   try {
     const txt = await fs.readFile(file, "utf8");
-    return JSON.parse(txt) as unknown;
+    if (txt.trim() === "") {
+      return { content: {} };
+    }
+    const parsed = JSON.parse(txt) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      "content" in (parsed as object)
+    ) {
+      const c = (parsed as { content: unknown }).content;
+      if (
+        c === null ||
+        (typeof c === "object" && !Array.isArray(c))
+      ) {
+        return parsed as { content: Record<string, unknown> | null };
+      }
+    }
+    /* レガシー: ルートがそのままユーザー JSON のときは content で包む（todo-app は data.content を参照） */
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return { content: parsed as Record<string, unknown> };
+    }
+    return { content: {} };
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && e.code === "ENOENT") {
       return { content: {} };
@@ -66,8 +95,7 @@ export async function PUT(
     const out = {
       content: (body as { content: Record<string, unknown> }).content,
     };
-    const file = getProgramDataFilePath(programId);
-    await fs.mkdir(path.dirname(file), { recursive: true });
+    const file = await ensureProgramDataFileParent(programId);
     await fs.writeFile(file, JSON.stringify(out, null, 2), "utf8");
     return NextResponse.json(out);
   } catch {

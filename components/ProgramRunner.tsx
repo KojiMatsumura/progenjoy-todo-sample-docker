@@ -140,6 +140,36 @@ function formatTime(d: Date): string {
 /** 巨大な postMessage をログにそのまま出すと固まるため切り詰める */
 const LOG_DATA_MAX_CHARS = 4000;
 
+/** `lib/paths` の isValidProgramIdForData と同じ（クライアントで paths を import しない） */
+const PROGRAM_ID_SAFE = /^[a-zA-Z0-9_-]+$/;
+
+function isValidProgramId(id: string): boolean {
+  return PROGRAM_ID_SAFE.test(id);
+}
+
+/** `/programs/<programId>/...` から programId を取る（一覧未取得でも iframe src と一致させる） */
+function parseProgramIdFromProgramsPath(pathOrUrl: string): string | null {
+  try {
+    const pathname = new URL(pathOrUrl, "http://localhost").pathname;
+    const parts = pathname.split("/").filter(Boolean);
+    const i = parts.indexOf("programs");
+    if (i >= 0 && parts[i + 1] && isValidProgramId(parts[i + 1])) {
+      return parts[i + 1];
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function resolveBridgeProgramId(
+  selectedId: string | null,
+  iframeProgramsPath: string
+): string | null {
+  if (selectedId && isValidProgramId(selectedId)) return selectedId;
+  return parseProgramIdFromProgramsPath(iframeProgramsPath);
+}
+
 function stringifyForLog(data: unknown): string {
   try {
     const s = JSON.stringify(data);
@@ -253,16 +283,30 @@ function runUserLogic(userCode: string): Promise<unknown> {
   });
 }
 
-/** `MessageEvent.source` は null になり得る。iframe 破棄後の postMessage は例外になり得る */
+/**
+ * `MessageEvent.source` は null になり得る。iframe 破棄後の postMessage は例外になり得る。
+ * 注意: `source instanceof Window` は iframe が**別レルム**のため**同一オリジンでも false**
+ * となり、応答が届かなくなる。ここでは `postMessage` の有無で duck-type 判定する。
+ */
 function replyToChildSource(
   source: MessageEventSource | null,
   message: unknown
 ): void {
   if (source == null) return;
+  if (typeof MessagePort !== "undefined" && source instanceof MessagePort) {
+    return;
+  }
+  if (
+    typeof ServiceWorker !== "undefined" &&
+    source instanceof ServiceWorker
+  ) {
+    return;
+  }
+  if (typeof (source as { postMessage?: unknown }).postMessage !== "function") {
+    return;
+  }
   try {
-    if (typeof Window !== "undefined" && source instanceof Window) {
-      source.postMessage(message, childReplyTarget);
-    }
+    (source as Window).postMessage(message, childReplyTarget);
   } catch {
     /* detached iframe など */
   }
@@ -598,7 +642,10 @@ export function ProgramRunner() {
     const queue = [...privacyReplayQueueRef.current];
     privacyReplayQueueRef.current = [];
 
-    const programId = selectedProgramIdRef.current;
+    const programId = resolveBridgeProgramId(
+      selectedProgramIdRef.current,
+      selectedProgramPathRef.current
+    );
     const cw = iframeRef.current?.contentWindow;
     if (!programId || !cw) return;
 
@@ -753,7 +800,10 @@ export function ProgramRunner() {
   );
 
   const runProgramQuality = useCallback(() => {
-    const programId = selectedProgramIdRef.current;
+    const programId = resolveBridgeProgramId(
+      selectedProgramIdRef.current,
+      selectedProgramPathRef.current
+    );
     if (!programId) {
       appendLog("out", "program-quality: program 未選択", null);
       return;
@@ -849,7 +899,10 @@ export function ProgramRunner() {
           replyToChildSource(ev.source, PRIVACY_MODE_RESPONSE);
           return;
         }
-        const programId = selectedProgramIdRef.current;
+        const programId = resolveBridgeProgramId(
+          selectedProgramIdRef.current,
+          selectedProgramPathRef.current
+        );
         if (!programId) {
           appendLog("out", "api_id:1 → program 未選択", null);
           replyToChildSource(ev.source, {
@@ -935,7 +988,10 @@ export function ProgramRunner() {
           replyToChildSource(ev.source, PRIVACY_MODE_RESPONSE);
           return;
         }
-        const programId = selectedProgramIdRef.current;
+        const programId = resolveBridgeProgramId(
+          selectedProgramIdRef.current,
+          selectedProgramPathRef.current
+        );
         if (!programId) {
           appendLog("out", "api_id:2 → program 未選択", null);
           replyToChildSource(ev.source, {
